@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Sintoniza la Señal</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Tipografía moderna y limpia -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    
+    <!-- PANTALLA 1: INTRO -->
+    <section id="screen-intro" class="screen active">
+        <div class="intro-content">
+            <p class="fade-in-text">Hay una señal escondida aquí.</p>
+            <p class="fade-in-text delay-1">Encuéntrala.</p>
+            <button id="btn-start" class="btn-primary fade-in-text delay-2">INICIAR</button>
+        </div>
+    </section>
+
+    <!-- PANTALLA 2: PUZLE DE FRECUENCIAS -->
+    <section id="screen-tuning" class="screen">
+        <header class="tuning-header">
+            <h1>SINTONIZA LA SEÑAL</h1>
+        </header>
+        
+        <div class="oscilloscope-container">
+            <canvas id="oscilloscope"></canvas>
+            <div class="glow-overlay"></div>
+        </div>
+
+        <div class="mixer-container">
+            <!-- Canal Graves -->
+            <div class="mixer-channel">
+                <div class="slider-track" id="slider-bass">
+                    <div class="slider-fill"></div>
+                    <div class="slider-thumb"></div>
+                </div>
+                <span class="channel-label">GRAVES</span>
+            </div>
+            
+            <!-- Canal Medios -->
+            <div class="mixer-channel">
+                <div class="slider-track" id="slider-mid">
+                    <div class="slider-fill"></div>
+                    <div class="slider-thumb"></div>
+                </div>
+                <span class="channel-label">MEDIOS</span>
+            </div>
+            
+            <!-- Canal Agudos -->
+            <div class="mixer-channel">
+                <div class="slider-track" id="slider-treble">
+                    <div class="slider-fill"></div>
+                    <div class="slider-thumb"></div>
+                </div>
+                <span class="channel-label">AGUDOS</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- PANTALLA 3: ENCONTRADA & REVELACIÓN -->
+    <section id="screen-reveal" class="screen">
+        <div id="reveal-step-1" class="reveal-step">
+            <h2>SEÑAL ENCONTRADA</h2>
+        </div>
+        <div id="reveal-step-2" class="reveal-step hidden">
+            <p>Creo que esta señal nos lleva a algún sitio...</p>
+        </div>
+        <div id="reveal-step-3" class="reveal-step hidden">
+            <h2 class="artist-name">MACACO</h2>
+            <p class="ticket-count">2 ENTRADAS</p>
+            <button id="btn-show-tickets" class="btn-primary">VER LAS ENTRADAS</button>
+        </div>
+    </section>
+
+    <!-- PANTALLA 4: ENTRADAS -->
+    <section id="screen-tickets" class="screen">
+        <div class="tickets-container">
+            
+            <div class="ticket-card">
+                <div class="ticket-image" id="t-img-1"></div>
+                <div class="ticket-info">
+                    <h3 class="t-name">CONCERT_NAME</h3>
+                    <p class="t-date">CONCERT_DATE</p>
+                    <p class="t-loc">CONCERT_LOCATION</p>
+                </div>
+            </div>
+
+            <div class="ticket-card">
+                <div class="ticket-image" id="t-img-2"></div>
+                <div class="ticket-info">
+                    <h3 class="t-name">CONCERT_NAME</h3>
+                    <p class="t-date">CONCERT_DATE</p>
+                    <p class="t-loc">CONCERT_LOCATION</p>
+                </div>
+            </div>
+
+            <p class="final-message" id="final-msg">Nos vamos a ver a Macaco ❤️</p>
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>
