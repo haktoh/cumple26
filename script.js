@@ -3,24 +3,24 @@
    Edita estos valores para personalizar la experiencia
 ========================================================== */
 const CONFIG = {
-    // La combinación secreta para los sliders (valores del 0 al 100)
+    // La combinación secreta para los sliders
     targetBass: 25,
     targetMid: 80,
     targetTreble: 45,
 
-    // Datos de las entradas (que se mostrarán en la tarjeta dorada)
-    concertName: "MACACO - VUELÁBAMOS TOUR",
-    concertDate: "15 DE OCTUBRE, 2026",
-    concertLocation: "WIZINK CENTER, MADRID",
+    // Datos de las entradas (Aquí pones los de VALENCIA)
+    concertName: "MACACO - FUTURO ANCESTRAL TOUR",
+    concertDate: "20 DE NOVIEMBRE, 2026", // Ej: 20 DE NOVIEMBRE, 2026
+    concertLocation: "SALA MOON, VALENCIA", // Pon el sitio real
 
-    // URLs de las imágenes de las entradas (usa tus JPG de Canva aquí)
-    ticketImage1: "entrada1.jpg", 
-    ticketImage2: "entrada2.jpg",
+    // Rutas de las imágenes (Solo fotos, sin texto)
+    ticketImage1: "macaco1.jpg", 
+    ticketImage2: "macaco2.jpg",
 
-    // Mensaje final personalizado (aclarando que las reales las tienes tú)
-    finalMessage: "Nota: Las entradas oficiales están a buen recaudo en mi app de Fever. ¡Nos vamos de concierto! ❤️",
+    // Mensaje final personalizado aclarando lo de Fever
+    finalMessage: "Nota: Las entradas oficiales y los QR están a buen recaudo en mi app de Fever. ¡Nos vamos de concierto! ❤️",
 
-    // URL de la canción "Lenguas de Signos"
+    // URL de la canción
     audioUrl: "Lenguas de Signos.mp3"
 };
 
