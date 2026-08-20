@@ -10,8 +10,8 @@ const CONFIG = {
 
     // Datos de las entradas (Aquí pones los de VALENCIA)
     concertName: "MACACO - FUTURO ANCESTRAL TOUR",
-    concertDate: "20 DE NOVIEMBRE, 2026", // Ej: 20 DE NOVIEMBRE, 2026
-    concertLocation: "SALA MOON, VALENCIA", // Pon el sitio real
+    concertDate: "20 DE NOVIEMBRE, 2026", 
+    concertLocation: "SALA MOON, VALENCIA", 
 
     // Rutas de las imágenes (Solo fotos, sin texto)
     ticketImage1: "macaco1.jpg", 
@@ -25,27 +25,29 @@ const CONFIG = {
 };
 
 /* ==========================================================
-   VARIABLES GLOBALES
+   VARIABLES GLOBALES & ESTADOS
 ========================================================== */
-let gameState = 'INTRO'; // INTRO, TUNING, FOUND, REVEAL, TICKETS
-
-// Valores iniciales de los sliders
-let currentValues = {
-    bass: 50,
-    mid: 50,
-    treble: 50
-};
-
-// Variables de Web Audio API
 let audioCtx;
 let analyser;
-let bufferLength;
-let dataArray;
-let songSource;
-let filterNode;
-let noiseSource;
-let noiseGain;
+let noiseGain, songGain;
+let filterNode, noiseSource, songSource;
+let animationId;
 let isAudioInitialized = false;
+
+const bgAudio = new Audio(CONFIG.audioUrl);
+bgAudio.loop = true;
+bgAudio.crossOrigin = "anonymous";
+
+let isWon = false;
+let isDragging = false;
+let currentSlider = null;
+
+// Valores iniciales de los sliders (desordenados intencionadamente)
+let values = {
+    bass: 80,
+    mid: 20,
+    treble: 90
+};
 
 // Elementos del DOM
 const screens = {
@@ -55,308 +57,279 @@ const screens = {
     tickets: document.getElementById('screen-tickets')
 };
 
-const canvas = document.getElementById('oscilloscope');
-const canvasCtx = canvas.getContext('2d');
-
 /* ==========================================================
-   INICIALIZACIÓN
+   INICIALIZACIÓN DEL JUEGO Y AUDIO
 ========================================================== */
-document.getElementById('btn-start').addEventListener('click', () => {
-    initAudio();
+document.getElementById('btn-start').addEventListener('click', async () => {
     switchScreen('intro', 'tuning');
-    gameState = 'TUNING';
-    resizeCanvas();
-    drawWaveform();
+    await initAudio();
+    initVisualizer();
 });
 
-window.addEventListener('resize', resizeCanvas);
+async function initAudio() {
+    if (isAudioInitialized) return;
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 1024;
+        
+        // 1. Elemento de la Canción (muy bajo y ahogado)
+        songSource = audioCtx.createMediaElementSource(bgAudio);
+        
+        filterNode = audioCtx.createBiquadFilter();
+        filterNode.type = 'lowpass';
+        filterNode.frequency.value = 100; // Totalmente ininteligible
+
+        songGain = audioCtx.createGain();
+        songGain.gain.value = 0.05; // Volumen al 5%
+        
+        // 2. Generador de Ruido Estático (Alto)
+        const bufferSize = audioCtx.sampleRate * 2;
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            output[i] = Math.random() * 2 - 1;
+        }
+        noiseSource = audioCtx.createBufferSource();
+        noiseSource.buffer = noiseBuffer;
+        noiseSource.loop = true;
+
+        noiseGain = audioCtx.createGain();
+        noiseGain.gain.value = 1.8;
+
+        // Conectar rutas al destino final
+        songSource.connect(filterNode).connect(songGain).connect(analyser);
+        noiseSource.connect(noiseGain).connect(analyser);
+        analyser.connect(audioCtx.destination);
+
+        bgAudio.play().catch(e => console.log("Error reproduciendo audio:", e));
+        noiseSource.start();
+
+        isAudioInitialized = true;
+        checkProximity();
+
+    } catch (e) {
+        console.warn("Web Audio API no soportado.", e);
+    }
+}
+
+/* ==========================================================
+   LÓGICA DEL OSCILOSCOPIO
+========================================================== */
+const canvas = document.getElementById('oscilloscope');
+const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {
-    // Ajustar el canvas al contenedor
-    const container = canvas.parentElement;
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
+    if(canvas.parentElement) {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    }
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function initVisualizer() {
+    if(!analyser) return;
+    
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function draw() {
+        animationId = requestAnimationFrame(draw);
+        analyser.getByteTimeDomainData(dataArray);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#00FF9D';
+        ctx.beginPath();
+
+        const sliceWidth = canvas.width * 1.0 / bufferLength;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = v * (canvas.height / 2);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            x += sliceWidth;
+        }
+        ctx.lineTo(canvas.width, canvas.height / 2);
+        ctx.stroke();
+    }
+    draw();
 }
 
 /* ==========================================================
-   NUEVA LÓGICA DE AUDIO: SINTONIZANDO LA RADIO
+   CONTROL DE SLIDERS (TÁCTIL)
 ========================================================== */
-const bgAudio = new Audio(CONFIG.audioUrl);
-bgAudio.loop = true; // Suena en bucle mientras juega
-bgAudio.crossOrigin = "anonymous";
+const tracks = {
+    bass: document.getElementById('slider-bass'),
+    mid: document.getElementById('slider-mid'),
+    treble: document.getElementById('slider-treble')
+};
 
-function initAudio() {
-    if (isAudioInitialized) return;
+Object.keys(tracks).forEach(key => {
+    const track = tracks[key];
+    if(!track) return;
     
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) {
-        console.warn("Web Audio API no soportada en este navegador.");
-        return;
-    }
-
-    audioCtx = new AudioContext();
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    bufferLength = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(bufferLength);
-
-    // 1. Conectar la canción
-    songSource = audioCtx.createMediaElementSource(bgAudio);
-    
-    // 2. Crear un filtro pasabajos (Efecto debajo del agua/radio ahogada)
-    filterNode = audioCtx.createBiquadFilter();
-    filterNode.type = 'lowpass';
-    filterNode.frequency.value = 300; // Empieza súper distorsionado
-    
-    // 3. Crear Ruido Blanco (Estática de radio)
-    const bufferSize = audioCtx.sampleRate * 2; 
-    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-    }
-    noiseSource = audioCtx.createBufferSource();
-    noiseSource.buffer = noiseBuffer;
-    noiseSource.loop = true;
-    
-    noiseGain = audioCtx.createGain();
-    noiseGain.gain.value = 0.5; // Ruido bastante alto al principio
-
-    // Conectar el grafo de audio: Canción -> Filtro -> Analizador
-    songSource.connect(filterNode);
-    filterNode.connect(analyser);
-    
-    // Conectar el Ruido -> Gain -> Analizador
-    noiseSource.connect(noiseGain);
-    noiseGain.connect(analyser);
-    
-    analyser.connect(audioCtx.destination);
-    
-    // Reproducir
-    bgAudio.play().catch(e => console.log("Error reproduciendo audio:", e));
-    noiseSource.start();
-    
-    isAudioInitialized = true;
-    updateAudioNode();
-}
-
-function updateAudioNode() {
-    if (!isAudioInitialized || gameState !== 'TUNING') return;
-
-    // Calcular el error: Distancia entre dónde están los sliders y dónde deberían estar
-    const eBass = Math.abs(currentValues.bass - CONFIG.targetBass);
-    const eMid = Math.abs(currentValues.mid - CONFIG.targetMid);
-    const eTreble = Math.abs(currentValues.treble - CONFIG.targetTreble);
-    
-    // Error máximo posible es 300 (100 por slider). Lo pasamos a porcentaje (0 a 1).
-    let globalError = (eBass + eMid + eTreble) / 300;
-    
-    // Condición de victoria: si está a menos de un 5% de error
-    if (globalError < 0.05) {
-        handleWin();
-        return;
-    }
-
-    // MAPEO DE MAGIA:
-    // Filtro se va abriendo de 300Hz (mal) hasta 20000Hz (sonido limpio) logarítmicamente
-    const minFreq = 300;
-    const maxFreq = 20000;
-    const newFreq = minFreq + (maxFreq - minFreq) * (1 - Math.pow(globalError, 0.5));
-    filterNode.frequency.setTargetAtTime(newFreq, audioCtx.currentTime, 0.1);
-    
-    // El ruido de estática va bajando progresivamente a 0
-    noiseGain.gain.setTargetAtTime(globalError * 0.4, audioCtx.currentTime, 0.1);
-
-    // Haptic feedback (Vibra un poquito si se acerca mucho a la solución)
-    if (globalError < 0.20 && navigator.vibrate) {
-        if(Math.random() > 0.8) navigator.vibrate(10);
-    }
-}
-
-/* ==========================================================
-   LÓGICA DE SLIDERS (TOUCH/POINTER)
-========================================================== */
-const sliders = document.querySelectorAll('.slider');
-
-sliders.forEach(slider => {
-    const thumb = slider.querySelector('.slider-thumb');
-    const track = slider.querySelector('.slider-track');
-    const id = slider.id.replace('slider-', ''); // bass, mid, treble
-    
-    let isDragging = false;
-
-    const updateSlider = (clientY) => {
-        const rect = track.getBoundingClientRect();
-        // Calculamos la posición invertida (100 arriba, 0 abajo)
-        let percent = 100 - (((clientY - rect.top) / rect.height) * 100);
-        
-        // Mantener dentro del límite 0-100
-        percent = Math.max(0, Math.min(100, percent));
-        
-        currentValues[id] = percent;
-        thumb.style.bottom = `${percent}%`;
-        
-        updateAudioNode();
-    };
-
-    // Inicializar visualmente en 50%
-    thumb.style.bottom = '50%';
-
-    slider.addEventListener('pointerdown', (e) => {
-        if (gameState !== 'TUNING') return;
+    track.addEventListener('pointerdown', (e) => {
+        if(isWon) return;
         isDragging = true;
-        slider.setPointerCapture(e.pointerId);
-        updateSlider(e.clientY);
+        currentSlider = key;
+        track.setPointerCapture(e.pointerId);
+        handleMove(e, track, key);
     });
 
-    slider.addEventListener('pointermove', (e) => {
-        if (!isDragging || gameState !== 'TUNING') return;
-        updateSlider(e.clientY);
+    track.addEventListener('pointermove', (e) => {
+        if (!isDragging || currentSlider !== key) return;
+        handleMove(e, track, key);
     });
 
-    slider.addEventListener('pointerup', (e) => {
+    track.addEventListener('pointerup', (e) => {
         isDragging = false;
-        slider.releasePointerCapture(e.pointerId);
-    });
-
-    slider.addEventListener('pointercancel', () => {
-        isDragging = false;
+        currentSlider = null;
+        track.releasePointerCapture(e.pointerId);
     });
 });
 
+function handleMove(e, track, key) {
+    const rect = track.getBoundingClientRect();
+    let y = e.clientY - rect.top;
+    let percent = 100 - ((y / rect.height) * 100);
+    percent = Math.max(0, Math.min(100, percent));
+    
+    values[key] = percent;
+    updateSliderUI(track, percent);
+    checkProximity();
+}
+
+function updateSliderUI(track, percent) {
+    const thumb = track.querySelector('.slider-thumb');
+    const fill = track.querySelector('.slider-fill');
+    if(thumb) thumb.style.bottom = `${percent}%`;
+    if(fill) fill.style.height = `${percent}%`;
+}
+
+// Inicializar UI de sliders
+Object.keys(tracks).forEach(key => {
+    if(tracks[key]) updateSliderUI(tracks[key], values[key]);
+});
+
 /* ==========================================================
-   OSCILOSCOPIO (WAVEFORM VISUAL)
+   LÓGICA DE PROXIMIDAD (SINTONIZACIÓN)
 ========================================================== */
-function drawWaveform() {
-    if (gameState === 'TUNING' || gameState === 'FOUND') {
-        requestAnimationFrame(drawWaveform);
-    }
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Limpiar canvas
-    canvasCtx.clearRect(0, 0, width, height);
-
-    if (!isAudioInitialized) {
-        canvasCtx.lineWidth = 2;
-        canvasCtx.strokeStyle = 'rgba(0, 255, 157, 0.3)';
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(0, height / 2);
-        canvasCtx.lineTo(width, height / 2);
-        canvasCtx.stroke();
-        return;
-    }
-
-    // Dibujar datos reales del audio
-    analyser.getByteTimeDomainData(dataArray);
-
-    canvasCtx.lineWidth = 3;
+function checkProximity() {
+    const errB = Math.abs(values.bass - CONFIG.targetBass);
+    const errM = Math.abs(values.mid - CONFIG.targetMid);
+    const errT = Math.abs(values.treble - CONFIG.targetTreble);
     
-    // Color brillante según proximidad
-    const eBass = Math.abs(currentValues.bass - CONFIG.targetBass);
-    const eMid = Math.abs(currentValues.mid - CONFIG.targetMid);
-    const eTreble = Math.abs(currentValues.treble - CONFIG.targetTreble);
-    let globalError = (eBass + eMid + eTreble) / 300;
-    
-    const alpha = Math.max(0.3, 1 - globalError);
-    canvasCtx.strokeStyle = `rgba(0, 255, 157, ${alpha})`;
-    canvasCtx.shadowBlur = alpha * 15;
-    canvasCtx.shadowColor = '#00FF9D';
+    const totalError = errB + errM + errT;
+    let normalizedError = Math.min(totalError / 120, 1.0);
 
-    canvasCtx.beginPath();
-    const sliceWidth = width * 1.0 / bufferLength;
-    let x = 0;
+    const glowIntensity = 1 - normalizedError;
+    document.documentElement.style.setProperty('--ui-glow', glowIntensity);
 
-    for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0; 
-        const y = v * height / 2;
-
-        if (i === 0) canvasCtx.moveTo(x, y);
-        else canvasCtx.lineTo(x, y);
-
-        x += sliceWidth;
+    // Haptic sutil si roza el valor correcto
+    if (navigator.vibrate && totalError < 40 && totalError % 10 < 2 && !isWon) {
+        navigator.vibrate(20);
     }
 
-    canvasCtx.lineTo(width, height / 2);
-    canvasCtx.stroke();
-    canvasCtx.shadowBlur = 0; // Reset
+    if (totalError < 12 && !isWon) {
+        triggerWinSequence();
+    } else if (!isWon) {
+        updateAudioEngine(normalizedError);
+    }
+}
+
+function updateAudioEngine(normalizedError) {
+    if (!audioCtx || !isAudioInitialized) return;
+    const time = audioCtx.currentTime;
+    
+    // 1. Volumen de la canción: Curva exponencial. Solo sube drásticamente al final
+    let songVol = 1.0 - normalizedError;
+    songVol = Math.max(0.01, Math.pow(songVol, 2));
+    if(songGain) songGain.gain.setTargetAtTime(songVol, time, 0.1);
+
+    // 2. Ruido Estático: Va bajando
+    let nVol = normalizedError * 1.8;
+    if(noiseGain) noiseGain.gain.setTargetAtTime(nVol, time, 0.1);
+
+    // 3. Claridad del Filtro: Pow(3) para que la voz no se entienda hasta estar muy cerca
+    const minFreq = 100;
+    const maxFreq = 20000;
+    const freqProgress = Math.max(0, 1 - normalizedError);
+    const newFreq = minFreq + (maxFreq - minFreq) * Math.pow(freqProgress, 3);
+    if(filterNode) filterNode.frequency.setTargetAtTime(newFreq, time, 0.1);
 }
 
 /* ==========================================================
-   ESTADOS DEL JUEGO Y TRANSICIONES
+   SECUENCIA FINAL Y REVELACIÓN
 ========================================================== */
-function handleWin() {
-    gameState = 'FOUND';
-    
-    // Apagar el ruido de estática por completo
-    if (noiseGain) {
-        noiseGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
-    }
-    // Quitar el filtro pasabajos (la canción suena al 100% limpia)
-    if (filterNode) {
-        filterNode.frequency.setTargetAtTime(20000, audioCtx.currentTime, 0.5);
-    }
-    
-    // Vibración de victoria prolongada
-    if (navigator.vibrate) {
-        navigator.vibrate([200, 100, 200, 100, 500]);
+function triggerWinSequence() {
+    isWon = true;
+
+    // Canción a tope de volumen y calidad, y 0 ruido
+    if (audioCtx) {
+        const time = audioCtx.currentTime;
+        if(songGain) songGain.gain.setTargetAtTime(1.0, time, 0.1);
+        if(noiseGain) noiseGain.gain.setTargetAtTime(0, time, 0.1);
+        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.1);
     }
 
-    // Flash blanco tipo película
-    const tuningScreen = document.getElementById('screen-tuning');
-    tuningScreen.classList.add('flash-effect');
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
+
+    // Disparar flash blanco y cambiar de pantalla
+    document.getElementById('screen-tuning').classList.add('flash-effect');
 
     setTimeout(() => {
         switchScreen('tuning', 'reveal');
-        startRevealSequence();
-    }, 1000);
+        runCinematicReveal();
+    }, 1000); 
 }
 
-function startRevealSequence() {
-    gameState = 'REVEAL';
+function runCinematicReveal() {
     const step1 = document.getElementById('reveal-step-1');
     const step2 = document.getElementById('reveal-step-2');
     const step3 = document.getElementById('reveal-step-3');
 
-    // Muestra "SEÑAL ENCONTRADA"
-    step1.classList.remove('hidden');
-
     setTimeout(() => {
-        step1.classList.add('hidden');
-        step2.classList.remove('hidden');
+        if(step1) step1.classList.add('hidden');
+        if(step2) step2.classList.remove('hidden');
     }, 2500);
 
-    // Muestra "Creo que esta señal nos lleva a algún sitio..."
     setTimeout(() => {
-        step2.classList.add('hidden');
-        step3.classList.remove('hidden');
+        if(step2) step2.classList.add('hidden');
+        if(step3) step3.classList.remove('hidden');
     }, 5500);
 }
 
 /* ==========================================================
-   PANTALLA FINAL: ENTRADAS
+   PANTALLA DE ENTRADAS
 ========================================================== */
 document.getElementById('btn-show-tickets').addEventListener('click', () => {
-    gameState = 'TICKETS';
-    
     document.querySelectorAll('.t-name').forEach(el => el.textContent = CONFIG.concertName);
     document.querySelectorAll('.t-date').forEach(el => el.textContent = CONFIG.concertDate);
     document.querySelectorAll('.t-loc').forEach(el => el.textContent = CONFIG.concertLocation);
     
-    document.getElementById('t-img-1').style.backgroundImage = `url('${CONFIG.ticketImage1}')`;
-    document.getElementById('t-img-2').style.backgroundImage = `url('${CONFIG.ticketImage2}')`;
-    document.getElementById('final-msg').textContent = CONFIG.finalMessage;
+    const tImg1 = document.getElementById('t-img-1');
+    const tImg2 = document.getElementById('t-img-2');
+    if(tImg1) tImg1.style.backgroundImage = `url('${CONFIG.ticketImage1}')`;
+    if(tImg2) tImg2.style.backgroundImage = `url('${CONFIG.ticketImage2}')`;
+    
+    const finalMsg = document.getElementById('final-msg') || document.querySelector('.final-message');
+    if(finalMsg) finalMsg.textContent = CONFIG.finalMessage;
 
     switchScreen('reveal', 'tickets');
 });
 
 /* ==========================================================
-   UTILIDAD DE TRANSICIÓN
+   UTILIDADES
 ========================================================== */
 function switchScreen(hideId, showId) {
-    screens[hideId].classList.remove('active');
+    if(screens[hideId]) screens[hideId].classList.remove('active');
     setTimeout(() => {
-        screens[showId].classList.add('active');
+        if(screens[showId]) screens[showId].classList.add('active');
     }, 600);
 }
