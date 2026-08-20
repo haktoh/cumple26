@@ -1,335 +1,363 @@
-/* ==========================================================
-   CONFIGURACIÓN PRINCIPAL
-   Edita estos valores para personalizar la experiencia
-========================================================== */
-const CONFIG = {
-    // La combinación secreta para los sliders
-    targetBass: 25,
-    targetMid: 80,
-    targetTreble: 45,
-
-    // Datos de las entradas (Aquí pones los de VALENCIA)
-    concertName: "MACACO - FUTURO ANCESTRAL TOUR",
-    concertDate: "20 DE NOVIEMBRE, 2026", 
-    concertLocation: "SALA MOON, VALENCIA", 
-
-    // Rutas de las imágenes (Solo fotos, sin texto)
-    ticketImage1: "macaco1.jpg", 
-    ticketImage2: "macaco2.jpg",
-
-    // Mensaje final personalizado aclarando lo de Fever
-    finalMessage: "No soy muy fan de Macaco, pero soy fan tuyo ¡Nos vamos de concierto! ❤️",
-
-    // URL de la canción
-    audioUrl: "Lenguas de Signos.mp3"
-};
-
-/* ==========================================================
-   VARIABLES GLOBALES & ESTADOS
-========================================================== */
-let audioCtx;
-let analyser;
-let noiseGain, songGain;
-let filterNode, noiseSource, songSource;
-let animationId;
-let isAudioInitialized = false;
-
-const bgAudio = new Audio(CONFIG.audioUrl);
-bgAudio.loop = true;
-bgAudio.crossOrigin = "anonymous";
-
-let isWon = false;
-let isDragging = false;
-let currentSlider = null;
-
-// Valores iniciales de los sliders (desordenados intencionadamente)
-let values = {
-    bass: 80,
-    mid: 20,
-    treble: 90
-};
-
-// Elementos del DOM
-const screens = {
-    intro: document.getElementById('screen-intro'),
-    tuning: document.getElementById('screen-tuning'),
-    reveal: document.getElementById('screen-reveal'),
-    tickets: document.getElementById('screen-tickets')
-};
-
-/* ==========================================================
-   INICIALIZACIÓN DEL JUEGO Y AUDIO
-========================================================== */
-document.getElementById('btn-start').addEventListener('click', async () => {
-    switchScreen('intro', 'tuning');
-    await initAudio();
-    initVisualizer();
-});
-
-async function initAudio() {
-    if (isAudioInitialized) return;
-    try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-        
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 1024;
-        
-        // 1. Elemento de la Canción (muy bajo y ahogado)
-        songSource = audioCtx.createMediaElementSource(bgAudio);
-        
-        filterNode = audioCtx.createBiquadFilter();
-        filterNode.type = 'lowpass';
-        filterNode.frequency.value = 100; // Totalmente ininteligible
-
-        songGain = audioCtx.createGain();
-        songGain.gain.value = 0.05; // Volumen al 5%
-        
-        // 2. Generador de Ruido Estático (Alto)
-        const bufferSize = audioCtx.sampleRate * 2;
-        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const output = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            output[i] = Math.random() * 2 - 1;
-        }
-        noiseSource = audioCtx.createBufferSource();
-        noiseSource.buffer = noiseBuffer;
-        noiseSource.loop = true;
-
-        noiseGain = audioCtx.createGain();
-        noiseGain.gain.value = 1.8;
-
-        // Conectar rutas al destino final
-        songSource.connect(filterNode).connect(songGain).connect(analyser);
-        noiseSource.connect(noiseGain).connect(analyser);
-        analyser.connect(audioCtx.destination);
-
-        bgAudio.play().catch(e => console.log("Error reproduciendo audio:", e));
-        noiseSource.start();
-
-        isAudioInitialized = true;
-        checkProximity();
-
-    } catch (e) {
-        console.warn("Web Audio API no soportado.", e);
-    }
+:root {
+    --bg-color: #030405;
+    --text-color: #E0E0E0;
+    --accent-color: #00FF9D;
+    --accent-glow: rgba(0, 255, 157, 0.5);
+    --panel-bg: #0A0C0E;
+    --slider-track: #15181C;
+    --slider-thumb: #2A2F35;
+    --font-main: 'Inter', system-ui, sans-serif;
+    --font-title: 'Space Grotesk', sans-serif;
 }
 
-/* ==========================================================
-   LÓGICA DEL OSCILOSCOPIO
-========================================================== */
-const canvas = document.getElementById('oscilloscope');
-const ctx = canvas.getContext('2d');
-
-function resizeCanvas() {
-    if(canvas.parentElement) {
-        canvas.width = canvas.parentElement.clientWidth;
-        canvas.height = canvas.parentElement.clientHeight;
-    }
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-function initVisualizer() {
-    if(!analyser) return;
-    
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    function draw() {
-        animationId = requestAnimationFrame(draw);
-        analyser.getByteTimeDomainData(dataArray);
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#00FF9D';
-        ctx.beginPath();
-
-        const sliceWidth = canvas.width * 1.0 / bufferLength;
-        let x = 0;
-
-        for (let i = 0; i < bufferLength; i++) {
-            const v = dataArray[i] / 128.0;
-            const y = v * (canvas.height / 2);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-            x += sliceWidth;
-        }
-        ctx.lineTo(canvas.width, canvas.height / 2);
-        ctx.stroke();
-    }
-    draw();
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
-/* ==========================================================
-   CONTROL DE SLIDERS (TÁCTIL)
-========================================================== */
-const tracks = {
-    bass: document.getElementById('slider-bass'),
-    mid: document.getElementById('slider-mid'),
-    treble: document.getElementById('slider-treble')
-};
-
-Object.keys(tracks).forEach(key => {
-    const track = tracks[key];
-    if(!track) return;
-    
-    track.addEventListener('pointerdown', (e) => {
-        if(isWon) return;
-        isDragging = true;
-        currentSlider = key;
-        track.setPointerCapture(e.pointerId);
-        handleMove(e, track, key);
-    });
-
-    track.addEventListener('pointermove', (e) => {
-        if (!isDragging || currentSlider !== key) return;
-        handleMove(e, track, key);
-    });
-
-    track.addEventListener('pointerup', (e) => {
-        isDragging = false;
-        currentSlider = null;
-        track.releasePointerCapture(e.pointerId);
-    });
-});
-
-function handleMove(e, track, key) {
-    const rect = track.getBoundingClientRect();
-    let y = e.clientY - rect.top;
-    let percent = 100 - ((y / rect.height) * 100);
-    percent = Math.max(0, Math.min(100, percent));
-    
-    values[key] = percent;
-    updateSliderUI(track, percent);
-    checkProximity();
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-main);
+    width: 100vw;
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* Evita el scroll elástico molesto al mover los sliders */
+    overscroll-behavior-y: none;
+    touch-action: none;
 }
 
-function updateSliderUI(track, percent) {
-    const thumb = track.querySelector('.slider-thumb');
-    const fill = track.querySelector('.slider-fill');
-    if(thumb) thumb.style.bottom = `${percent}%`;
-    if(fill) fill.style.height = `${percent}%`;
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.2s ease-in-out;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-// Inicializar UI de sliders
-Object.keys(tracks).forEach(key => {
-    if(tracks[key]) updateSliderUI(tracks[key], values[key]);
-});
-
-/* ==========================================================
-   LÓGICA DE PROXIMIDAD (SINTONIZACIÓN)
-========================================================== */
-function checkProximity() {
-    const errB = Math.abs(values.bass - CONFIG.targetBass);
-    const errM = Math.abs(values.mid - CONFIG.targetMid);
-    const errT = Math.abs(values.treble - CONFIG.targetTreble);
-    
-    const totalError = errB + errM + errT;
-    let normalizedError = Math.min(totalError / 120, 1.0);
-
-    const glowIntensity = 1 - normalizedError;
-    document.documentElement.style.setProperty('--ui-glow', glowIntensity);
-
-    // Haptic sutil si roza el valor correcto
-    if (navigator.vibrate && totalError < 40 && totalError % 10 < 2 && !isWon) {
-        navigator.vibrate(20);
-    }
-
-    if (totalError < 12 && !isWon) {
-        triggerWinSequence();
-    } else if (!isWon) {
-        updateAudioEngine(normalizedError);
-    }
+.screen.active {
+    opacity: 1;
+    pointer-events: all;
 }
 
-function updateAudioEngine(normalizedError) {
-    if (!audioCtx || !isAudioInitialized) return;
-    const time = audioCtx.currentTime;
-    
-    // 1. Volumen de la canción: Curva exponencial. Solo sube drásticamente al final
-    let songVol = 1.0 - normalizedError;
-    songVol = Math.max(0.01, Math.pow(songVol, 2));
-    if(songGain) songGain.gain.setTargetAtTime(songVol, time, 0.1);
-
-    // 2. Ruido Estático: Va bajando
-    let nVol = normalizedError * 1.8;
-    if(noiseGain) noiseGain.gain.setTargetAtTime(nVol, time, 0.1);
-
-    // 3. Claridad del Filtro: Pow(3) para que la voz no se entienda hasta estar muy cerca
-    const minFreq = 100;
-    const maxFreq = 20000;
-    const freqProgress = Math.max(0, 1 - normalizedError);
-    const newFreq = minFreq + (maxFreq - minFreq) * Math.pow(freqProgress, 3);
-    if(filterNode) filterNode.frequency.setTargetAtTime(newFreq, time, 0.1);
+/* INTRO */
+.intro-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 2rem;
+    gap: 1.5rem;
 }
 
-/* ==========================================================
-   SECUENCIA FINAL Y REVELACIÓN
-========================================================== */
-function triggerWinSequence() {
-    isWon = true;
-
-    // Canción a tope de volumen y calidad, y 0 ruido
-    if (audioCtx) {
-        const time = audioCtx.currentTime;
-        if(songGain) songGain.gain.setTargetAtTime(1.0, time, 0.1);
-        if(noiseGain) noiseGain.gain.setTargetAtTime(0, time, 0.1);
-        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.1);
-    }
-
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
-
-    // Disparar flash blanco y cambiar de pantalla
-    document.getElementById('screen-tuning').classList.add('flash-effect');
-
-    setTimeout(() => {
-        switchScreen('tuning', 'reveal');
-        runCinematicReveal();
-    }, 1000); 
+.intro-content p {
+    font-size: 1.1rem;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    color: #A0A5AA;
 }
 
-function runCinematicReveal() {
-    const step1 = document.getElementById('reveal-step-1');
-    const step2 = document.getElementById('reveal-step-2');
-    const step3 = document.getElementById('reveal-step-3');
+.fade-in-text {
+    opacity: 0;
+    animation: fadeIn 1.5s forwards ease-in-out;
+}
+.delay-1 { animation-delay: 1s; }
+.delay-2 { animation-delay: 2.5s; }
 
-    setTimeout(() => {
-        if(step1) step1.classList.add('hidden');
-        if(step2) step2.classList.remove('hidden');
-    }, 2500);
-
-    setTimeout(() => {
-        if(step2) step2.classList.add('hidden');
-        if(step3) step3.classList.remove('hidden');
-    }, 5500);
+@keyframes fadeIn {
+    to { opacity: 1; }
 }
 
-/* ==========================================================
-   PANTALLA DE ENTRADAS
-========================================================== */
-document.getElementById('btn-show-tickets').addEventListener('click', () => {
-    document.querySelectorAll('.t-name').forEach(el => el.textContent = CONFIG.concertName);
-    document.querySelectorAll('.t-date').forEach(el => el.textContent = CONFIG.concertDate);
-    document.querySelectorAll('.t-loc').forEach(el => el.textContent = CONFIG.concertLocation);
-    
-    const tImg1 = document.getElementById('t-img-1');
-    const tImg2 = document.getElementById('t-img-2');
-    if(tImg1) tImg1.style.backgroundImage = `url('${CONFIG.ticketImage1}')`;
-    if(tImg2) tImg2.style.backgroundImage = `url('${CONFIG.ticketImage2}')`;
-    
-    const finalMsg = document.getElementById('final-msg') || document.querySelector('.final-message');
-    if(finalMsg) finalMsg.textContent = CONFIG.finalMessage;
+.btn-primary {
+    background: transparent;
+    color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+    padding: 1rem 3rem;
+    font-family: var(--font-title);
+    font-size: 1rem;
+    letter-spacing: 2px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 2rem;
+    transition: all 0.3s ease;
+}
 
-    switchScreen('reveal', 'tickets');
-});
+.btn-primary:active {
+    background: var(--accent-color);
+    color: var(--bg-color);
+}
 
-/* ==========================================================
-   UTILIDADES
-========================================================== */
-function switchScreen(hideId, showId) {
-    if(screens[hideId]) screens[hideId].classList.remove('active');
-    setTimeout(() => {
-        if(screens[showId]) screens[showId].classList.add('active');
-    }, 600);
+/* TUNING */
+#screen-tuning {
+    justify-content: space-between;
+    background: radial-gradient(circle at 50% 50%, #0a0d10 0%, #030405 100%);
+}
+
+.tuning-header {
+    text-align: center;
+    padding: 2rem 0 1rem;
+}
+
+.tuning-header h1 {
+    font-family: var(--font-title);
+    font-size: 0.85rem;
+    letter-spacing: 4px;
+    color: #60656A;
+}
+
+.oscilloscope-container {
+    flex: 1;
+    width: 100%;
+    max-height: 35%;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 1rem;
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 10px rgba(0, 255, 157, var(--ui-glow, 0)));
+    transition: filter 0.3s;
+}
+
+.mixer-container {
+    flex: 1.2;
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+    padding: 2rem 1rem 3rem;
+    background: linear-gradient(to top, var(--panel-bg), transparent);
+}
+
+.mixer-channel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    width: 30%;
+    gap: 1.5rem;
+}
+
+.slider-track {
+    flex: 1;
+    width: 4px;
+    background: var(--slider-track);
+    border-radius: 2px;
+    position: relative;
+    touch-action: none;
+    display: flex;
+    justify-content: center;
+}
+
+.slider-track::before {
+    content: '';
+    position: absolute;
+    inset: -20px;
+}
+
+.slider-fill {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: var(--accent-color);
+    height: 50%;
+    border-radius: 2px;
+    opacity: calc(var(--ui-glow, 0) * 0.8);
+    box-shadow: 0 0 15px var(--accent-glow);
+    transition: opacity 0.3s;
+}
+
+.slider-thumb {
+    position: absolute;
+    width: 50px;
+    height: 24px;
+    background: var(--slider-thumb);
+    border: 2px solid #3A4048;
+    border-radius: 4px;
+    bottom: 50%;
+    transform: translateY(50%);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+}
+
+.slider-thumb::after {
+    content: '';
+    width: 70%;
+    height: 2px;
+    background: #60656A;
+    border-radius: 1px;
+}
+
+.channel-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: #60656A;
+}
+
+/* REVELACIÓN */
+#screen-reveal {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 2rem;
+}
+
+.reveal-step {
+    position: absolute;
+    width: 100%;
+    padding: 0 2rem;
+    opacity: 1;
+    transition: opacity 1.5s ease-in-out, transform 1.5s ease-in-out;
+    transform: translateY(0);
+}
+
+.reveal-step.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+}
+
+.reveal-step h2 {
+    font-family: var(--font-title);
+    color: var(--accent-color);
+    font-size: 1.5rem;
+    letter-spacing: 3px;
+    text-shadow: 0 0 20px var(--accent-glow);
+}
+
+.reveal-step p {
+    font-size: 1.2rem;
+    font-weight: 300;
+    color: #E0E0E0;
+    line-height: 1.5;
+}
+
+.artist-name {
+    font-size: 3rem !important;
+    color: #FFF !important;
+    margin-bottom: 0.5rem;
+    text-shadow: none !important;
+}
+
+.ticket-count {
+    font-family: var(--font-title);
+    color: var(--accent-color) !important;
+    letter-spacing: 4px;
+    font-size: 0.9rem !important;
+    margin-bottom: 3rem;
+}
+
+/* ENTRADAS */
+#screen-tickets {
+    background: #050505;
+}
+
+.tickets-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem 1.5rem;
+    gap: 1.5rem;
+    overflow-y: auto;
+}
+
+.ticket-card {
+    width: 100%;
+    max-width: 350px;
+    background: #111;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    border: 1px solid #222;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+}
+
+.ticket-image {
+    width: 100px;
+    background-size: cover;
+    background-position: center;
+    border-right: 2px dashed #222;
+    position: relative;
+}
+
+.ticket-image::before, .ticket-image::after {
+    content: '';
+    position: absolute;
+    right: -10px;
+    width: 20px;
+    height: 20px;
+    background: #050505;
+    border-radius: 50%;
+}
+.ticket-image::before { top: -10px; }
+.ticket-image::after { bottom: -10px; }
+
+.ticket-info {
+    flex: 1;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.t-name {
+    font-family: var(--font-title);
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    color: #FFF;
+}
+
+.t-date, .t-loc {
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 0.2rem;
+}
+
+.final-message {
+    margin-top: 1rem;
+    font-family: var(--font-title);
+    color: var(--accent-color);
+    font-size: 1.1rem;
+    text-align: center;
+}
+
+.flash-effect::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: white;
+    animation: flashAnim 1s forwards;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+@keyframes flashAnim {
+    0% { opacity: 0; }
+    10% { opacity: 1; }
+    100% { opacity: 0; }
 }
