@@ -14,7 +14,6 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    /* Prevenir selecciones y comportamientos táctiles por defecto en toda la app */
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -31,8 +30,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    
-    /* VITAL PARA EL PIXEL 9A: Evita tirones de pantalla o pull-to-refresh */
+    /* CRÍTICO PIXEL 9A: Evita el rebote de la pantalla al arrastrar los sliders */
     overscroll-behavior-y: none;
     touch-action: none;
 }
@@ -56,9 +54,7 @@ body {
     pointer-events: all;
 }
 
-/* =========================================
-   INTRO
-   ========================================= */
+/* INTRO */
 .intro-content {
     flex: 1;
     display: flex;
@@ -107,9 +103,7 @@ body {
     color: var(--bg-color);
 }
 
-/* =========================================
-   TUNING (MESA DE MEZCLAS)
-   ========================================= */
+/* TUNING */
 #screen-tuning {
     justify-content: space-between;
     background: radial-gradient(circle at 50% 50%, #0a0d10 0%, #030405 100%);
@@ -145,7 +139,6 @@ canvas {
     transition: filter 0.3s;
 }
 
-/* Mezclador */
 .mixer-container {
     flex: 1.2;
     display: flex;
@@ -170,7 +163,7 @@ canvas {
     background: var(--slider-track);
     border-radius: 2px;
     position: relative;
-    touch-action: none; /* Vital para que no haga scroll al arrastrar */
+    touch-action: none;
     display: flex;
     justify-content: center;
 }
@@ -178,7 +171,7 @@ canvas {
 .slider-track::before {
     content: '';
     position: absolute;
-    inset: -20px; /* Área táctil ampliada invisible */
+    inset: -20px;
 }
 
 .slider-fill {
@@ -186,7 +179,7 @@ canvas {
     bottom: 0;
     width: 100%;
     background: var(--accent-color);
-    height: 50%; /* Controlado por JS */
+    height: 50%;
     border-radius: 2px;
     opacity: calc(var(--ui-glow, 0) * 0.8);
     box-shadow: 0 0 15px var(--accent-glow);
@@ -200,7 +193,7 @@ canvas {
     background: var(--slider-thumb);
     border: 2px solid #3A4048;
     border-radius: 4px;
-    bottom: 50%; /* Controlado por JS */
+    bottom: 50%;
     transform: translateY(50%);
     box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     display: flex;
@@ -209,7 +202,6 @@ canvas {
     pointer-events: none;
 }
 
-/* Línea indicadora del fader */
 .slider-thumb::after {
     content: '';
     width: 70%;
@@ -225,9 +217,7 @@ canvas {
     color: #60656A;
 }
 
-/* =========================================
-   REVELACIÓN (CINEMATOGRÁFICA)
-   ========================================= */
+/* REVELACIÓN */
 #screen-reveal {
     justify-content: center;
     align-items: center;
@@ -280,9 +270,7 @@ canvas {
     margin-bottom: 3rem;
 }
 
-/* =========================================
-   ENTRADAS
-   ========================================= */
+/* ENTRADAS */
 #screen-tickets {
     background: #050505;
 }
@@ -317,7 +305,6 @@ canvas {
     position: relative;
 }
 
-/* Muescas de la entrada */
 .ticket-image::before, .ticket-image::after {
     content: '';
     position: absolute;
@@ -359,9 +346,6 @@ canvas {
     text-align: center;
 }
 
-/* =========================================
-   EFECTO DE FLASH BLANCO AL GANAR
-   ========================================= */
 .flash-effect::after {
     content: '';
     position: absolute;
@@ -371,16 +355,9 @@ canvas {
     pointer-events: none;
     z-index: 1000;
 }
+
 @keyframes flashAnim {
     0% { opacity: 0; }
     10% { opacity: 1; }
     100% { opacity: 0; }
-}
-
-/* Reducción de movimiento */
-@media (prefers-reduced-motion: reduce) {
-    .screen, .reveal-step, .fade-in-text {
-        transition-duration: 0.1s !important;
-        animation-duration: 0.1s !important;
-    }
 }
