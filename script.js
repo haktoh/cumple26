@@ -32,6 +32,7 @@ let songSource, noiseSource, synthOsc;
 let animationId;
 let isAudioInitialized = false;
 let isWon = false;
+let currentVisualError = 1.0;
 
 const bgAudio = new Audio(CONFIG.audioUrl);
 bgAudio.loop = true;
@@ -98,19 +99,6 @@ async function initAudio() {
         noiseGainVisual = audioCtx.createGain();
         noiseGainVisual.gain.value = 1.0;
         noiseSource.connect(noiseGainVisual).connect(analyser);
-
-        // 3. LA ONDA SINTÉTICA (Truco: Solo va a la pantalla para que se "alinee" visualmente)
-        synthOsc = audioCtx.createOscillator();
-        synthOsc.type = 'sine';
-        synthOsc.frequency.value = 86; // <-- CAMBIA EL 150 POR 86
-        synthOsc.connect(analyser);
-        synthOsc.start();
-
-        bgAudio.play().catch(e => console.log("Error de audio:", e));
-        noiseSource.start();
-
-        isAudioInitialized = true;
-        checkProximity();
     } catch (e) {
         console.warn("Web Audio API no soportado.", e);
     }
@@ -137,27 +125,41 @@ function initVisualizer() {
     const dataArray = new Uint8Array(bufferLength);
 
     function draw() {
-       if (isWon) return; // ¡AÑADE ESTA LÍNEA AQUÍ! Congela la onda al ganar.
-        animationId = requestAnimationFrame(draw);
-        analyser.getByteTimeDomainData(dataArray);
+           if (isWon) return; // Si ha ganado, la onda se congela perfecta
+    
+    animationId = requestAnimationFrame(draw);
+    analyser.getByteTimeDomainData(dataArray);
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#00FF9D';
-        ctx.beginPath();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 2.5; // Un pelín más gruesa queda más premium
+    ctx.strokeStyle = '#00FF9D';
+    ctx.beginPath();
 
-        const sliceWidth = canvas.width * 1.0 / bufferLength;
-        let x = 0;
+    const sliceWidth = canvas.width * 1.0 / bufferLength;
+    let x = 0;
 
-        for (let i = 0; i < bufferLength; i++) {
-            const v = dataArray[i] / 128.0;
-            const y = v * (canvas.height / 2);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-            x += sliceWidth;
-        }
-        ctx.lineTo(canvas.width, canvas.height / 2);
-        ctx.stroke();
+    for (let i = 0; i < bufferLength; i++) {
+        // 1. El ruido caótico del audio real (va de -1 a 1)
+        const noise = (dataArray[i] - 128) / 128.0; 
+        
+        // 2. La onda perfecta estática (matemática, nunca se mueve del sitio)
+        // El * 6 hace que se dibujen 3 curvas perfectas en la pantalla
+        const perfectSine = Math.sin((i / bufferLength) * Math.PI * 6); 
+        
+        // 3. LA MEZCLA MAESTRA:
+        // Mezclamos ruido y onda perfecta según lo cerca que esté (currentVisualError)
+        const finalValue = (noise * currentVisualError) + (perfectSine * (1 - currentVisualError));
+        
+        // Lo convertimos a la altura del lienzo
+        const y = (canvas.height / 2) + (finalValue * (canvas.height / 3));
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        
+        x += sliceWidth;
+    }
+    ctx.lineTo(canvas.width, canvas.height / 2);
+    ctx.stroke();
     }
     draw();
 }
@@ -223,26 +225,26 @@ function checkProximity() {
     const errM = Math.abs(values.mid - CONFIG.targetMid);
     const errT = Math.abs(values.treble - CONFIG.targetTreble);
     
-    const totalError = errB + errM + errT; // Máximo posible = 300
+    const totalError = errB + errM + errT; // Máximo posible = aprox 260
     
-    // VICTORIA: Nivel de dificultad exacto de tu IA original (< 15 puntos de error total)
+    // VICTORIA
     if (totalError < 15 && !isWon) {
+        currentVisualError = 0; // Al ganar, onda perfecta
         triggerWinSequence();
         return;
     } 
 
     if (!isWon) {
-        //let errorRatio = Math.min(totalError / 150, 1.0); // 0.0 (cerca) a 1.0 (lejos)
-       let errorRatio = totalError / 260; 
-       errorRatio = Math.max(0, Math.min(1.0, errorRatio)); 
+        // Hacemos que la transición sea fluida desde el principio (260 es el error máximo)
+        currentVisualError = Math.max(0, Math.min(1.0, totalError / 260));
         
         // Brillo de la interfaz
-        document.documentElement.style.setProperty('--ui-glow', 1 - errorRatio);
+        document.documentElement.style.setProperty('--ui-glow', 1 - currentVisualError);
 
         // Haptic sutil al acercarse
         if (navigator.vibrate && totalError < 30 && totalError % 5 < 1) navigator.vibrate(15);
         
-        updateAudioEngine(errorRatio);
+        updateAudioEngine(currentVisualError);
     }
 }
 
