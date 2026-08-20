@@ -102,7 +102,7 @@ async function initAudio() {
 }
 
 /* ==========================================================
-   OSCILOSCOPIO VISUAL (UNA SOLA ONDA QUE SE APLANA)
+   OSCILOSCOPIO VISUAL (CON EASING FLUIDO)
 ========================================================== */
 const canvas = document.getElementById('oscilloscope');
 const ctx = canvas.getContext('2d');
@@ -117,53 +117,50 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 function initVisualizer() {
-    function draw() {
-        // SI GANA: LÍNEA TOTALMENTE PLANA
-        if (isWon) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#00FF9D'; // Verde brillante
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#00FF9D';
-            ctx.beginPath();
-            ctx.moveTo(0, canvas.height / 2);
-            ctx.lineTo(canvas.width, canvas.height / 2); // "-----------------"
-            ctx.stroke();
-            return; // Detenemos la animación
-        }
+    let currentVisualError = 1.0; // Usamos esto para suavizar la animación
 
+    function draw() {
         animationId = requestAnimationFrame(draw);
-        time += 0.1;
+        time += 0.08;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.shadowBlur = 0;
 
-        // Calculamos el error global sumando las 3 palancas
+        // Calculamos el error matemático real
         const errB = Math.abs(values.bass - CONFIG.targetBass);
         const errM = Math.abs(values.mid - CONFIG.targetMid);
         const errT = Math.abs(values.treble - CONFIG.targetTreble);
+        const totalError = errB + errM + errT;
         
-        // normalizamos el error de 0.0 (perfecto) a 1.0 (lejos)
-        let errorRatio = Math.max(0, Math.min(1.0, (errB + errM + errT) / 220));
+        // El objetivo visual: 0 si ha ganado, si no, proporcional
+        let targetErrorRatio = isWon ? 0 : Math.max(0, Math.min(1.0, totalError / 150));
 
-        // Dibujamos LA ÚNICA línea
-        ctx.strokeStyle = `rgba(0, 255, 157, ${1 - (errorRatio * 0.5)})`;
-        ctx.lineWidth = 2.5;
+        // LA MAGIA DE LA FLUIDEZ: Interpolación (Easing)
+        // La línea nunca da saltos bruscos, persigue el objetivo suavemente
+        currentVisualError += (targetErrorRatio - currentVisualError) * 0.08;
+
+        // Ajustes estéticos progresivos (Color, grosor y brillo)
+        ctx.strokeStyle = `rgba(0, 255, 157, ${1 - (currentVisualError * 0.4)})`;
+        ctx.lineWidth = 2 + (2 * (1 - currentVisualError)); // Engorda al final
+        
+        // Brillo que explota exponencialmente cuando se aplana
+        ctx.shadowBlur = Math.pow(1 - currentVisualError, 4) * 20; 
+        ctx.shadowColor = '#00FF9D';
+
         ctx.beginPath();
-
-        const points = 120; // Detalle de la línea
+        const points = 120;
         const sliceWidth = canvas.width / points;
         let x = 0;
 
         for(let i = 0; i <= points; i++) {
-            // Mezcla de onda curva (para que sea bonita) y ruido de picos
             const baseWave = Math.sin((i * 0.1) + time);
             const staticNoise = (Math.random() * 2 - 1);
             
-            // LA MAGIA ESTÁ AQUÍ: La altura de los picos se multiplica por el error.
-            // Si el error es 0, toda la ecuación da 0, lo que hace una línea recta.
-            const waveAmplitude = (baseWave * 0.3) + (staticNoise * 0.7);
-            const yOffset = waveAmplitude * errorRatio * (canvas.height / 1.8);
+            // Transición matemática: Pasa de ser ruido puro a onda suave y fluida
+            const waveAmplitude = (staticNoise * currentVisualError) + (baseWave * (1 - currentVisualError) * 0.5);
+            
+            // Se va reduciendo la altura hasta quedar plana en el centro
+            const yOffset = waveAmplitude * currentVisualError * (canvas.height / 1.5);
             
             const y = (canvas.height / 2) + yOffset;
 
@@ -240,20 +237,17 @@ function checkProximity() {
     
     const totalError = errB + errM + errT;
     
-    // VICTORIA: La onda ya es una línea plana "------"
+    // VICTORIA: Tolerancia para ganar (margen de 15 sobre 300)
     if (totalError < 15 && !isWon) {
         triggerWinSequence();
         return;
     } 
 
     if (!isWon) {
-        // errorRatio: 1 = Muy lejos -> 0 = Casi plano
         let errorRatio = Math.max(0, Math.min(1.0, totalError / 220));
         
-        // El brillo verde de la interfaz sube al acercarse
         document.documentElement.style.setProperty('--ui-glow', 1 - errorRatio);
 
-        // Haptic sutil al acercarse
         if (navigator.vibrate && totalError < 30 && totalError % 5 < 1) navigator.vibrate(15);
         
         updateAudioEngine(errorRatio);
@@ -264,21 +258,16 @@ function updateAudioEngine(errorRatio) {
     if (!audioCtx || !isAudioInitialized) return;
     const time = audioCtx.currentTime;
     
-    // Nivel de puntería: 0 (lejos) a 1 (perfecto)
     const accuracy = 1 - errorRatio;
 
-    // 1. EL RUIDO: Va bajando, pero siempre tapa a la canción hasta el final
+    // El ruido de radio baja pero siempre tapa la canción
     if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0.3 + (1.5 * errorRatio), time, 0.1);
 
-    // 2. EL SECRETO MUSICAL (FILTRO EXPONENCIAL):
-    // Al usar Math.pow(accuracy, 4), el filtro se queda en números bajísimos (100-300Hz) 
-    // la inmensa mayor parte del tiempo. Es imposible saber qué canción es.
-    // Solo cuando la puntería (accuracy) supera el 80-90% se abre de golpe dejando oír la melodía.
+    // Filtro exponencial para no revelar la canción hasta el final
     const newFreq = 50 + (8000 * Math.pow(accuracy, 4));
     if(filterNode) filterNode.frequency.setTargetAtTime(newFreq, time, 0.1);
 
-    // 3. EL VOLUMEN DE LA CANCIÓN:
-    // Pasa igual, se mantiene bajísimo y solo sube significativamente al final del todo.
+    // El volumen de la canción
     let songVol = 0.01 + (0.99 * Math.pow(accuracy, 3));
     if(songGain) songGain.gain.setTargetAtTime(songVol, time, 0.1);
 }
@@ -292,20 +281,16 @@ function triggerWinSequence() {
     if (audioCtx) {
         const time = audioCtx.currentTime;
         
-        // 1. Silenciamos la estática al instante
         if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0, time, 0.05);
 
-        // 2. MÚSICA 100% NÍTIDA Y AL MÁXIMO
         if(songGain) songGain.gain.setTargetAtTime(1.0, time, 0.05);
-        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.05); // Abre toda la canción
+        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.05); 
     }
 
-    // Vibración de victoria
     if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
 
     document.getElementById('screen-tuning').classList.add('flash-effect');
 
-    // Esperamos 1.5 segundos para que vea la onda perfectamente plana y brillar antes de cambiar de pantalla
     setTimeout(() => {
         switchScreen('tuning', 'reveal');
         runCinematicReveal();
