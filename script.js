@@ -26,13 +26,13 @@ const CONFIG = {
 /* ==========================================================
    VARIABLES GLOBALES
 ========================================================== */
-let audioCtx, analyser;
-let songGain, noiseGainAudio, noiseGainVisual, filterNode;
-let songSource, noiseSource, synthOsc;
+let audioCtx;
+let songGain, noiseGainAudio, filterNode;
+let songSource, noiseSource;
 let animationId;
 let isAudioInitialized = false;
 let isWon = false;
-let currentVisualError = 1.0;
+let time = 0; // Para animar las ondas
 
 const bgAudio = new Audio(CONFIG.audioUrl);
 bgAudio.loop = true;
@@ -66,17 +66,14 @@ async function initAudio() {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
         
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 1024;
-        
-        // 1. LA CANCIÓN (Va a los altavoces, súper ahogada)
+        // 1. LA CANCIÓN (Empieza con filtro bajo, se irá abriendo)
         songSource = audioCtx.createMediaElementSource(bgAudio);
         filterNode = audioCtx.createBiquadFilter();
         filterNode.type = 'lowpass';
-        filterNode.frequency.value = 100; // Totalmente ininteligible
+        filterNode.frequency.value = 100; // Súper ahogado inicial
         
         songGain = audioCtx.createGain();
-        songGain.gain.value = 0.1;
+        songGain.gain.value = 0.05; // Volumen muy bajo inicial
         
         songSource.connect(filterNode).connect(songGain).connect(audioCtx.destination);
         
@@ -90,22 +87,22 @@ async function initAudio() {
         noiseSource.buffer = noiseBuffer;
         noiseSource.loop = true;
 
-        // Ruido para los altavoces (Fuerte)
         noiseGainAudio = audioCtx.createGain();
         noiseGainAudio.gain.value = 1.5;
         noiseSource.connect(noiseGainAudio).connect(audioCtx.destination);
 
-        // Ruido para la pantalla (Visual)
-        noiseGainVisual = audioCtx.createGain();
-        noiseGainVisual.gain.value = 1.0;
-        noiseSource.connect(noiseGainVisual).connect(analyser);
+        bgAudio.play().catch(e => console.log("Error de audio:", e));
+        noiseSource.start();
+
+        isAudioInitialized = true;
+        checkProximity();
     } catch (e) {
         console.warn("Web Audio API no soportado.", e);
     }
 }
 
 /* ==========================================================
-   OSCILOSCOPIO VISUAL
+   OSCILOSCOPIO VISUAL (LAS 3 ONDAS)
 ========================================================== */
 const canvas = document.getElementById('oscilloscope');
 const ctx = canvas.getContext('2d');
@@ -120,46 +117,61 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 function initVisualizer() {
-    if(!analyser) return;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
     function draw() {
-           if (isWon) return; // Si ha ganado, la onda se congela perfecta
-    
-    animationId = requestAnimationFrame(draw);
-    analyser.getByteTimeDomainData(dataArray);
+        // SI GANA: DIBUJAMOS LA LÍNEA RECTA PERFECTA EN EL CENTRO
+        if (isWon) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#00FF9D'; // Verde brillante
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#00FF9D';
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+            return; // Se detiene la animación y queda 100% congelada
+        }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.lineWidth = 2.5; // Un pelín más gruesa queda más premium
-    ctx.strokeStyle = '#00FF9D';
-    ctx.beginPath();
+        animationId = requestAnimationFrame(draw);
+        time += 0.05;
 
-    const sliceWidth = canvas.width * 1.0 / bufferLength;
-    let x = 0;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.shadowBlur = 0; // Sin brillo hasta que sea perfecta
 
-    for (let i = 0; i < bufferLength; i++) {
-        // 1. El ruido caótico del audio real (va de -1 a 1)
-        const noise = (dataArray[i] - 128) / 128.0; 
-        
-        // 2. La onda perfecta estática (matemática, nunca se mueve del sitio)
-        // El * 6 hace que se dibujen 3 curvas perfectas en la pantalla
-        const perfectSine = Math.sin((i / bufferLength) * Math.PI * 6); 
-        
-        // 3. LA MEZCLA MAESTRA:
-        // Mezclamos ruido y onda perfecta según lo cerca que esté (currentVisualError)
-        const finalValue = (noise * currentVisualError) + (perfectSine * (1 - currentVisualError));
-        
-        // Lo convertimos a la altura del lienzo
-        const y = (canvas.height / 2) + (finalValue * (canvas.height / 3));
+        // Calculamos cuánto de "mal" está cada palanca individualmente (de 0 a 1)
+        const errB = Math.min(1.0, Math.abs(values.bass - CONFIG.targetBass) / 80);
+        const errM = Math.min(1.0, Math.abs(values.mid - CONFIG.targetMid) / 80);
+        const errT = Math.min(1.0, Math.abs(values.treble - CONFIG.targetTreble) / 80);
 
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-        
-        x += sliceWidth;
-    }
-    ctx.lineTo(canvas.width, canvas.height / 2);
-    ctx.stroke();
+        const points = 80;
+        const sliceWidth = canvas.width / points;
+
+        function drawWave(error, freq, speed, offset, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            let x = 0;
+            
+            for(let i = 0; i <= points; i++) {
+                const staticNoise = (Math.random() * 0.6 - 0.3) * error;
+                const wave = Math.sin((i * freq) + (time * speed) + offset);
+                
+                // Mientras menor sea el error, más plano es el yOffset
+                const yOffset = (wave + staticNoise) * error * (canvas.height / 2.5);
+                const y = (canvas.height / 2) + yOffset;
+                
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+                
+                x += sliceWidth;
+            }
+            ctx.stroke();
+        }
+
+        // 3 Ondas para las 3 palancas
+        drawWave(errB, 0.05, 1.2, 0, 'rgba(0, 255, 157, 0.8)');
+        drawWave(errM, 0.15, 2.0, 10, 'rgba(0, 255, 157, 0.5)');
+        drawWave(errT, 0.40, 3.5, 20, 'rgba(0, 255, 157, 0.3)');
     }
     draw();
 }
@@ -218,33 +230,32 @@ function updateSliderUI(track, percent) {
 Object.keys(tracks).forEach(key => updateSliderUI(tracks[key], values[key]));
 
 /* ==========================================================
-   LÓGICA DE PROXIMIDAD Y VICTORIA (Restaurado a la original)
+   LÓGICA DE PROXIMIDAD PROGRESIVA AUDIO/VISUAL
 ========================================================== */
 function checkProximity() {
     const errB = Math.abs(values.bass - CONFIG.targetBass);
     const errM = Math.abs(values.mid - CONFIG.targetMid);
     const errT = Math.abs(values.treble - CONFIG.targetTreble);
     
-    const totalError = errB + errM + errT; // Máximo posible = aprox 260
+    const totalError = errB + errM + errT;
     
-    // VICTORIA
+    // VICTORIA: Las ondas ya son casi perfectamente planas
     if (totalError < 15 && !isWon) {
-        currentVisualError = 0; // Al ganar, onda perfecta
         triggerWinSequence();
         return;
     } 
 
     if (!isWon) {
-        // Hacemos que la transición sea fluida desde el principio (260 es el error máximo)
-        currentVisualError = Math.max(0, Math.min(1.0, totalError / 260));
+        // errorRatio: 1 = Muy lejos (Caos total) -> 0 = Muy cerca (Casi plano)
+        let errorRatio = Math.max(0, Math.min(1.0, totalError / 260));
         
-        // Brillo de la interfaz
-        document.documentElement.style.setProperty('--ui-glow', 1 - currentVisualError);
+        // Brillo visual
+        document.documentElement.style.setProperty('--ui-glow', 1 - errorRatio);
 
         // Haptic sutil al acercarse
         if (navigator.vibrate && totalError < 30 && totalError % 5 < 1) navigator.vibrate(15);
         
-        updateAudioEngine(currentVisualError);
+        updateAudioEngine(errorRatio);
     }
 }
 
@@ -252,19 +263,19 @@ function updateAudioEngine(errorRatio) {
     if (!audioCtx || !isAudioInitialized) return;
     const time = audioCtx.currentTime;
     
-    // 1. Estática visual: Baja a 0 al acercarse. Así la onda se "alinea" perfecta.
-    if(noiseGainVisual) noiseGainVisual.gain.setTargetAtTime(errorRatio, time, 0.1);
+    // Nivel de acierto: 0 (lejos) a 1 (perfecto)
+    const accuracy = 1 - errorRatio;
 
-    // 2. Estática auditiva: Siempre se oye ruido en los altavoces hasta que gana.
-    let nVolAudio = 0.5 + errorRatio; 
-    if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(nVolAudio, time, 0.1);
+    // 1. EL RUIDO: Va desapareciendo progresivamente conforme se aplanan las ondas
+    if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(1.5 * errorRatio, time, 0.1);
 
-    // 3. Filtro de Canción: NUNCA pasa de 400Hz. Es imposible saber qué canción es.
-    const newFreq = 100 + (300 * Math.pow(1 - errorRatio, 2));
+    // 2. LA CLARIDAD (FILTRO): Se abre poco a poco, dejando escuchar la voz y agudos
+    // Empieza en 100Hz y sube con una curva matemática hasta 8000Hz (muy nítido)
+    const newFreq = 100 + (8000 * Math.pow(accuracy, 2));
     if(filterNode) filterNode.frequency.setTargetAtTime(newFreq, time, 0.1);
 
-    // 4. Volumen de canción: Sube un poco pero se mantiene de fondo.
-    let songVol = 0.1 + (0.4 * (1 - errorRatio));
+    // 3. EL VOLUMEN: Sube progresivamente del 5% al 100%
+    let songVol = 0.05 + (0.95 * accuracy);
     if(songGain) songGain.gain.setTargetAtTime(songVol, time, 0.1);
 }
 
@@ -276,16 +287,16 @@ function triggerWinSequence() {
 
     if (audioCtx) {
         const time = audioCtx.currentTime;
-        // Apagamos los ruidos y la onda falsa
-        if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0, time, 0.1);
-        if(noiseGainVisual) noiseGainVisual.gain.setTargetAtTime(0, time, 0.1);
-        if(synthOsc) synthOsc.disconnect(); 
+        
+        // 1. Apagamos el poco ruido que quede de golpe
+        if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0, time, 0.05);
 
-        // Liberamos la canción real en HD
-        if(songGain) songGain.gain.setTargetAtTime(1.0, time, 0.1);
-        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.1);
+        // 2. MÚSICA 100% NÍTIDA Y AL MÁXIMO (Quita el filtro del todo)
+        if(songGain) songGain.gain.setTargetAtTime(1.0, time, 0.05);
+        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.05);
     }
 
+    // Vibración de victoria
     if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
 
     document.getElementById('screen-tuning').classList.add('flash-effect');
@@ -293,7 +304,7 @@ function triggerWinSequence() {
     setTimeout(() => {
         switchScreen('tuning', 'reveal');
         runCinematicReveal();
-    }, 1000); 
+    }, 1500); 
 }
 
 function runCinematicReveal() {
