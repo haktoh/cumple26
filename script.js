@@ -8,43 +8,44 @@ const CONFIG = {
     targetMid: 80,
     targetTreble: 45,
 
-    // Datos de las entradas
+    // Datos de las entradas (que se mostrarán en la tarjeta dorada)
     concertName: "MACACO - VUELÁBAMOS TOUR",
     concertDate: "15 DE OCTUBRE, 2026",
     concertLocation: "WIZINK CENTER, MADRID",
 
-    // URLs de las imágenes de las entradas (pueden ser rutas locales './assets/img1.jpg' o URLs)
-    ticketImage1: "https://images.unsplash.com/photo-1540039155732-67ee6c764a7c?auto=format&fit=crop&w=400&q=80",
-    ticketImage2: "https://images.unsplash.com/photo-1470229722913-7c090be5c5a0?auto=format&fit=crop&w=400&q=80",
+    // URLs de las imágenes de las entradas (usa tus JPG de Canva aquí)
+    ticketImage1: "entrada1.jpg", 
+    ticketImage2: "entrada2.jpg",
 
-    // Mensaje final personalizado
-    finalMessage: "Nos vamos a ver a Macaco ❤️",
+    // Mensaje final personalizado (aclarando que las reales las tienes tú)
+    finalMessage: "Nota: Las entradas oficiales están a buen recaudo en mi app de Fever. ¡Nos vamos de concierto! ❤️",
 
-    // URL de la canción "Lenguas de Signos" de Macaco. 
-    // IMPORTANTE: Por temas de copyright, sube el archivo mp3 a tu servidor (ej: './assets/macaco.mp3')
-    // Si está vacío, usará un acorde celestial de victoria generado con código.
-    songUrl: "" 
+    // URL de la canción "Lenguas de Signos"
+    audioUrl: "Lenguas de Signos.mp3"
 };
 
 /* ==========================================================
-   VARIABLES GLOBALES & ESTADOS
+   VARIABLES GLOBALES
 ========================================================== */
+let gameState = 'INTRO'; // INTRO, TUNING, FOUND, REVEAL, TICKETS
+
+// Valores iniciales de los sliders
+let currentValues = {
+    bass: 50,
+    mid: 50,
+    treble: 50
+};
+
+// Variables de Web Audio API
 let audioCtx;
 let analyser;
-let noiseGain, synthGain, masterGain;
-let noiseFilter;
-let animationId;
-
-let isWon = false;
-let isDragging = false;
-let currentSlider = null;
-
-// Valores iniciales de los sliders (desordenados intencionadamente)
-let values = {
-    bass: 80,
-    mid: 20,
-    treble: 90
-};
+let bufferLength;
+let dataArray;
+let songSource;
+let filterNode;
+let noiseSource;
+let noiseGain;
+let isAudioInitialized = false;
 
 // Elementos del DOM
 const screens = {
@@ -54,282 +55,279 @@ const screens = {
     tickets: document.getElementById('screen-tickets')
 };
 
+const canvas = document.getElementById('oscilloscope');
+const canvasCtx = canvas.getContext('2d');
+
 /* ==========================================================
-   INICIALIZACIÓN DEL JUEGO Y AUDIO
+   INICIALIZACIÓN
 ========================================================== */
-document.getElementById('btn-start').addEventListener('click', async () => {
+document.getElementById('btn-start').addEventListener('click', () => {
+    initAudio();
     switchScreen('intro', 'tuning');
-    await initAudio();
-    initVisualizer();
+    gameState = 'TUNING';
+    resizeCanvas();
+    drawWaveform();
 });
 
-async function initAudio() {
-    try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-        
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.5; // Volumen general moderado
-        masterGain.connect(audioCtx.destination);
-
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 1024;
-        masterGain.connect(analyser);
-
-        // 1. Generador de Ruido (Interferencia)
-        const bufferSize = audioCtx.sampleRate * 2;
-        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const output = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            output[i] = Math.random() * 2 - 1;
-        }
-        const whiteNoise = audioCtx.createBufferSource();
-        whiteNoise.buffer = noiseBuffer;
-        whiteNoise.loop = true;
-
-        noiseFilter = audioCtx.createBiquadFilter();
-        noiseFilter.type = 'lowpass';
-        
-        noiseGain = audioCtx.createGain();
-        whiteNoise.connect(noiseFilter).connect(noiseGain).connect(masterGain);
-        whiteNoise.start();
-
-        // 2. Generador de la "Señal" oculta (Sintetizador puro)
-        const osc = audioCtx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = 329.63; // Nota E4 bonita
-
-        synthGain = audioCtx.createGain();
-        synthGain.gain.value = 0; // Oculta al principio
-        osc.connect(synthGain).connect(masterGain);
-        osc.start();
-
-        // Aplicamos los valores iniciales
-        updateAudioEngine();
-
-    } catch (e) {
-        console.warn("Web Audio API no soportado, fallback visual activado.", e);
-    }
-}
-
-/* ==========================================================
-   LÓGICA DEL OSCILOSCOPIO
-========================================================== */
-const canvas = document.getElementById('oscilloscope');
-const ctx = canvas.getContext('2d');
+window.addEventListener('resize', resizeCanvas);
 
 function resizeCanvas() {
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-function initVisualizer() {
-    if(!analyser) return;
-    
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    function draw() {
-        if(isWon) return; // Congelar visualización al ganar
-        animationId = requestAnimationFrame(draw);
-
-        analyser.getByteTimeDomainData(dataArray);
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.lineWidth = 2;
-        
-        // El color depende de la proximidad (variable CSS interpretada aquí como verde claro)
-        ctx.strokeStyle = '#00FF9D';
-        ctx.beginPath();
-
-        const sliceWidth = canvas.width * 1.0 / bufferLength;
-        let x = 0;
-
-        for (let i = 0; i < bufferLength; i++) {
-            const v = dataArray[i] / 128.0;
-            const y = v * (canvas.height / 2);
-
-            if (i === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
-            x += sliceWidth;
-        }
-
-        ctx.lineTo(canvas.width, canvas.height / 2);
-        ctx.stroke();
-    }
-    draw();
+    // Ajustar el canvas al contenedor
+    const container = canvas.parentElement;
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
 }
 
 /* ==========================================================
-   CONTROL DE SLIDERS (TÁCTIL)
+   NUEVA LÓGICA DE AUDIO: SINTONIZANDO LA RADIO
 ========================================================== */
-const tracks = {
-    bass: document.getElementById('slider-bass'),
-    mid: document.getElementById('slider-mid'),
-    treble: document.getElementById('slider-treble')
-};
+const bgAudio = new Audio(CONFIG.audioUrl);
+bgAudio.loop = true; // Suena en bucle mientras juega
+bgAudio.crossOrigin = "anonymous";
 
-Object.keys(tracks).forEach(key => {
-    const track = tracks[key];
+function initAudio() {
+    if (isAudioInitialized) return;
     
-    track.addEventListener('pointerdown', (e) => {
-        if(isWon) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) {
+        console.warn("Web Audio API no soportada en este navegador.");
+        return;
+    }
+
+    audioCtx = new AudioContext();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    bufferLength = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufferLength);
+
+    // 1. Conectar la canción
+    songSource = audioCtx.createMediaElementSource(bgAudio);
+    
+    // 2. Crear un filtro pasabajos (Efecto debajo del agua/radio ahogada)
+    filterNode = audioCtx.createBiquadFilter();
+    filterNode.type = 'lowpass';
+    filterNode.frequency.value = 300; // Empieza súper distorsionado
+    
+    // 3. Crear Ruido Blanco (Estática de radio)
+    const bufferSize = audioCtx.sampleRate * 2; 
+    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+    }
+    noiseSource = audioCtx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+    noiseSource.loop = true;
+    
+    noiseGain = audioCtx.createGain();
+    noiseGain.gain.value = 0.5; // Ruido bastante alto al principio
+
+    // Conectar el grafo de audio: Canción -> Filtro -> Analizador
+    songSource.connect(filterNode);
+    filterNode.connect(analyser);
+    
+    // Conectar el Ruido -> Gain -> Analizador
+    noiseSource.connect(noiseGain);
+    noiseGain.connect(analyser);
+    
+    analyser.connect(audioCtx.destination);
+    
+    // Reproducir
+    bgAudio.play().catch(e => console.log("Error reproduciendo audio:", e));
+    noiseSource.start();
+    
+    isAudioInitialized = true;
+    updateAudioNode();
+}
+
+function updateAudioNode() {
+    if (!isAudioInitialized || gameState !== 'TUNING') return;
+
+    // Calcular el error: Distancia entre dónde están los sliders y dónde deberían estar
+    const eBass = Math.abs(currentValues.bass - CONFIG.targetBass);
+    const eMid = Math.abs(currentValues.mid - CONFIG.targetMid);
+    const eTreble = Math.abs(currentValues.treble - CONFIG.targetTreble);
+    
+    // Error máximo posible es 300 (100 por slider). Lo pasamos a porcentaje (0 a 1).
+    let globalError = (eBass + eMid + eTreble) / 300;
+    
+    // Condición de victoria: si está a menos de un 5% de error
+    if (globalError < 0.05) {
+        handleWin();
+        return;
+    }
+
+    // MAPEO DE MAGIA:
+    // Filtro se va abriendo de 300Hz (mal) hasta 20000Hz (sonido limpio) logarítmicamente
+    const minFreq = 300;
+    const maxFreq = 20000;
+    const newFreq = minFreq + (maxFreq - minFreq) * (1 - Math.pow(globalError, 0.5));
+    filterNode.frequency.setTargetAtTime(newFreq, audioCtx.currentTime, 0.1);
+    
+    // El ruido de estática va bajando progresivamente a 0
+    noiseGain.gain.setTargetAtTime(globalError * 0.4, audioCtx.currentTime, 0.1);
+
+    // Haptic feedback (Vibra un poquito si se acerca mucho a la solución)
+    if (globalError < 0.20 && navigator.vibrate) {
+        if(Math.random() > 0.8) navigator.vibrate(10);
+    }
+}
+
+/* ==========================================================
+   LÓGICA DE SLIDERS (TOUCH/POINTER)
+========================================================== */
+const sliders = document.querySelectorAll('.slider');
+
+sliders.forEach(slider => {
+    const thumb = slider.querySelector('.slider-thumb');
+    const track = slider.querySelector('.slider-track');
+    const id = slider.id.replace('slider-', ''); // bass, mid, treble
+    
+    let isDragging = false;
+
+    const updateSlider = (clientY) => {
+        const rect = track.getBoundingClientRect();
+        // Calculamos la posición invertida (100 arriba, 0 abajo)
+        let percent = 100 - (((clientY - rect.top) / rect.height) * 100);
+        
+        // Mantener dentro del límite 0-100
+        percent = Math.max(0, Math.min(100, percent));
+        
+        currentValues[id] = percent;
+        thumb.style.bottom = `${percent}%`;
+        
+        updateAudioNode();
+    };
+
+    // Inicializar visualmente en 50%
+    thumb.style.bottom = '50%';
+
+    slider.addEventListener('pointerdown', (e) => {
+        if (gameState !== 'TUNING') return;
         isDragging = true;
-        currentSlider = key;
-        track.setPointerCapture(e.pointerId);
-        handleMove(e, track, key);
+        slider.setPointerCapture(e.pointerId);
+        updateSlider(e.clientY);
     });
 
-    track.addEventListener('pointermove', (e) => {
-        if (!isDragging || currentSlider !== key) return;
-        handleMove(e, track, key);
+    slider.addEventListener('pointermove', (e) => {
+        if (!isDragging || gameState !== 'TUNING') return;
+        updateSlider(e.clientY);
     });
 
-    track.addEventListener('pointerup', (e) => {
+    slider.addEventListener('pointerup', (e) => {
         isDragging = false;
-        currentSlider = null;
-        track.releasePointerCapture(e.pointerId);
+        slider.releasePointerCapture(e.pointerId);
+    });
+
+    slider.addEventListener('pointercancel', () => {
+        isDragging = false;
     });
 });
 
-function handleMove(e, track, key) {
-    const rect = track.getBoundingClientRect();
-    // Calcular porcentaje de abajo hacia arriba
-    let y = e.clientY - rect.top;
-    let percent = 100 - ((y / rect.height) * 100);
-    percent = Math.max(0, Math.min(100, percent));
+/* ==========================================================
+   OSCILOSCOPIO (WAVEFORM VISUAL)
+========================================================== */
+function drawWaveform() {
+    if (gameState === 'TUNING' || gameState === 'FOUND') {
+        requestAnimationFrame(drawWaveform);
+    }
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Limpiar canvas
+    canvasCtx.clearRect(0, 0, width, height);
+
+    if (!isAudioInitialized) {
+        canvasCtx.lineWidth = 2;
+        canvasCtx.strokeStyle = 'rgba(0, 255, 157, 0.3)';
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(0, height / 2);
+        canvasCtx.lineTo(width, height / 2);
+        canvasCtx.stroke();
+        return;
+    }
+
+    // Dibujar datos reales del audio
+    analyser.getByteTimeDomainData(dataArray);
+
+    canvasCtx.lineWidth = 3;
     
-    values[key] = percent;
-    updateSliderUI(track, percent);
-    checkProximity();
-}
+    // Color brillante según proximidad
+    const eBass = Math.abs(currentValues.bass - CONFIG.targetBass);
+    const eMid = Math.abs(currentValues.mid - CONFIG.targetMid);
+    const eTreble = Math.abs(currentValues.treble - CONFIG.targetTreble);
+    let globalError = (eBass + eMid + eTreble) / 300;
+    
+    const alpha = Math.max(0.3, 1 - globalError);
+    canvasCtx.strokeStyle = `rgba(0, 255, 157, ${alpha})`;
+    canvasCtx.shadowBlur = alpha * 15;
+    canvasCtx.shadowColor = '#00FF9D';
 
-function updateSliderUI(track, percent) {
-    const thumb = track.querySelector('.slider-thumb');
-    const fill = track.querySelector('.slider-fill');
-    thumb.style.bottom = `${percent}%`;
-    fill.style.height = `${percent}%`;
-}
+    canvasCtx.beginPath();
+    const sliceWidth = width * 1.0 / bufferLength;
+    let x = 0;
 
-// Inicializar UI de sliders
-Object.keys(tracks).forEach(key => updateSliderUI(tracks[key], values[key]));
+    for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0; 
+        const y = v * height / 2;
+
+        if (i === 0) canvasCtx.moveTo(x, y);
+        else canvasCtx.lineTo(x, y);
+
+        x += sliceWidth;
+    }
+
+    canvasCtx.lineTo(width, height / 2);
+    canvasCtx.stroke();
+    canvasCtx.shadowBlur = 0; // Reset
+}
 
 /* ==========================================================
-   LÓGICA DE PROXIMIDAD Y RESOLUCIÓN
+   ESTADOS DEL JUEGO Y TRANSICIONES
 ========================================================== */
-function checkProximity() {
-    // Calculamos el error total (distancia a la combinación perfecta)
-    const errB = Math.abs(values.bass - CONFIG.targetBass);
-    const errM = Math.abs(values.mid - CONFIG.targetMid);
-    const errT = Math.abs(values.treble - CONFIG.targetTreble);
+function handleWin() {
+    gameState = 'FOUND';
     
-    const totalError = errB + errM + errT;
-    
-    // Rango de error: max 300 (teórico). Normalizamos 0 (perfecto) a 1 (lejos)
-    // Usamos 150 como límite donde el sonido ya es puro ruido
-    let normalizedError = Math.min(totalError / 120, 1.0);
-
-    // Actualizar variables CSS para el brillo de la interfaz
-    const glowIntensity = 1 - normalizedError;
-    document.documentElement.style.setProperty('--ui-glow', glowIntensity);
-
-    // Vibración sutil si cruzamos un umbral de proximidad bueno
-    if (navigator.vibrate && totalError < 40 && totalError % 10 < 2) {
-        navigator.vibrate(20);
-    }
-
-    // Condición de victoria
-    if (totalError < 12 && !isWon) {
-        triggerWinSequence();
-    } else if (!isWon) {
-        updateAudioEngine(normalizedError);
-    }
-}
-
-function updateAudioEngine(normalizedError) {
-    if (!audioCtx) return;
-
-    // Cuando el error es 1: Ruido a tope, señal oculta
-    // Cuando el error es 0: Ruido 0, señal audible y limpia
-    
-    // Suavizamos las transiciones de audio
-    const time = audioCtx.currentTime;
-    
+    // Apagar el ruido de estática por completo
     if (noiseGain) {
-        noiseGain.gain.setTargetAtTime(normalizedError * 0.8, time, 0.1);
-        // El filtro de ruido se abre haciendo el ruido más molesto si estás lejos
-        noiseFilter.frequency.setTargetAtTime(100 + (normalizedError * 3000), time, 0.1);
+        noiseGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+    }
+    // Quitar el filtro pasabajos (la canción suena al 100% limpia)
+    if (filterNode) {
+        filterNode.frequency.setTargetAtTime(20000, audioCtx.currentTime, 0.5);
     }
     
-    if (synthGain) {
-        // La señal se hace más fuerte cuanto más cerca estás
-        synthGain.gain.setTargetAtTime((1 - normalizedError) * 0.4, time, 0.1);
-    }
-}
-
-/* ==========================================================
-   SECUENCIA FINAL Y REVELACIÓN
-========================================================== */
-function triggerWinSequence() {
-    isWon = true;
-
-    // 1. Silencio
-    if (audioCtx) {
-        const time = audioCtx.currentTime;
-        masterGain.gain.setTargetAtTime(0, time, 0.05);
+    // Vibración de victoria prolongada
+    if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 500]);
     }
 
-    // Háptica fuerte de victoria
-    if (navigator.vibrate) navigator.vibrate([50, 50, 100]);
+    // Flash blanco tipo película
+    const tuningScreen = document.getElementById('screen-tuning');
+    tuningScreen.classList.add('flash-effect');
 
-    // 2. Pausa y Transición a Pantalla de Encontrada
     setTimeout(() => {
-        playFinalAudio(); // Iniciar canción final (o tono backup)
         switchScreen('tuning', 'reveal');
-        runCinematicReveal();
-    }, 400);
+        startRevealSequence();
+    }, 1000);
 }
 
-function playFinalAudio() {
-    if (CONFIG.songUrl) {
-        // Reproducir canción elegida
-        const finalAudio = new Audio(CONFIG.songUrl);
-        finalAudio.volume = 0.8;
-        finalAudio.play().catch(e => console.log("Error reproduciendo audio:", e));
-    } else {
-        // Fallback: Acorde de victoria sintético si no hay canción configurada
-        if(audioCtx) {
-            masterGain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            [329.63, 415.30, 493.88].forEach((freq, i) => { // Acorde E Major
-                const osc = audioCtx.createOscillator();
-                const g = audioCtx.createGain();
-                osc.frequency.value = freq;
-                osc.connect(g).connect(masterGain);
-                g.gain.setValueAtTime(0, audioCtx.currentTime);
-                g.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 1 + (i*0.2));
-                osc.start();
-            });
-        }
-    }
-}
-
-function runCinematicReveal() {
+function startRevealSequence() {
+    gameState = 'REVEAL';
     const step1 = document.getElementById('reveal-step-1');
     const step2 = document.getElementById('reveal-step-2');
     const step3 = document.getElementById('reveal-step-3');
 
-    // "SEÑAL ENCONTRADA" (Ya visible por defecto)
+    // Muestra "SEÑAL ENCONTRADA"
+    step1.classList.remove('hidden');
+
     setTimeout(() => {
         step1.classList.add('hidden');
         step2.classList.remove('hidden');
-    }, 2500); // 2.5s después de aparecer
+    }, 2500);
 
-    // "Creo que esta señal..."
+    // Muestra "Creo que esta señal nos lleva a algún sitio..."
     setTimeout(() => {
         step2.classList.add('hidden');
         step3.classList.remove('hidden');
@@ -337,10 +335,11 @@ function runCinematicReveal() {
 }
 
 /* ==========================================================
-   CONFIGURACIÓN DE ENTRADAS
+   PANTALLA FINAL: ENTRADAS
 ========================================================== */
 document.getElementById('btn-show-tickets').addEventListener('click', () => {
-    // Rellenar datos desde la configuración
+    gameState = 'TICKETS';
+    
     document.querySelectorAll('.t-name').forEach(el => el.textContent = CONFIG.concertName);
     document.querySelectorAll('.t-date').forEach(el => el.textContent = CONFIG.concertDate);
     document.querySelectorAll('.t-loc').forEach(el => el.textContent = CONFIG.concertLocation);
@@ -353,11 +352,11 @@ document.getElementById('btn-show-tickets').addEventListener('click', () => {
 });
 
 /* ==========================================================
-   UTILIDADES
+   UTILIDAD DE TRANSICIÓN
 ========================================================== */
 function switchScreen(hideId, showId) {
     screens[hideId].classList.remove('active');
     setTimeout(() => {
         screens[showId].classList.add('active');
-    }, 600); // Esperar a mitad de la transición CSS
+    }, 600);
 }
