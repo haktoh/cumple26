@@ -18,7 +18,7 @@ const CONFIG = {
     ticketImage2: "macaco2.jpg",
 
     // Mensaje final personalizado aclarando lo de Fever
-    finalMessage: "Nota: Las entradas oficiales y los QR están a buen recaudo en mi app de Fever. ¡Nos vamos de concierto! ❤️",
+    finalMessage: "No soy muy fan de Macaco, pero soy fan tuyo ¡Nos vamos de concierto! ❤️",
 
     // URL de la canción
     audioUrl: "Lenguas de Signos.mp3"
