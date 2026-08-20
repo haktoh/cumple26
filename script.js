@@ -32,7 +32,7 @@ let songSource, noiseSource;
 let animationId;
 let isAudioInitialized = false;
 let isWon = false;
-let time = 0; // Para animar las ondas
+let time = 0; 
 
 const bgAudio = new Audio(CONFIG.audioUrl);
 bgAudio.loop = true;
@@ -41,7 +41,7 @@ bgAudio.crossOrigin = "anonymous";
 let isDragging = false;
 let currentSlider = null;
 
-// Valores iniciales
+// Valores iniciales (desordenados)
 let values = { bass: 80, mid: 20, treble: 90 };
 
 const screens = {
@@ -66,18 +66,18 @@ async function initAudio() {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
         
-        // 1. LA CANCIÓN (Empieza con filtro bajo, se irá abriendo)
+        // 1. LA CANCIÓN (Muuuuy oculta al principio)
         songSource = audioCtx.createMediaElementSource(bgAudio);
         filterNode = audioCtx.createBiquadFilter();
         filterNode.type = 'lowpass';
-        filterNode.frequency.value = 100; // Súper ahogado inicial
+        filterNode.frequency.value = 50; // Filtro extremo: solo pasa un zumbido grave
         
         songGain = audioCtx.createGain();
-        songGain.gain.value = 0.05; // Volumen muy bajo inicial
+        songGain.gain.value = 0.01; // Volumen casi al 0%
         
         songSource.connect(filterNode).connect(songGain).connect(audioCtx.destination);
         
-        // 2. EL RUIDO DE ESTÁTICA
+        // 2. EL RUIDO DE ESTÁTICA (Fuerte para tapar)
         const bufferSize = audioCtx.sampleRate * 2;
         const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
         const output = noiseBuffer.getChannelData(0);
@@ -88,7 +88,7 @@ async function initAudio() {
         noiseSource.loop = true;
 
         noiseGainAudio = audioCtx.createGain();
-        noiseGainAudio.gain.value = 1.5;
+        noiseGainAudio.gain.value = 1.8;
         noiseSource.connect(noiseGainAudio).connect(audioCtx.destination);
 
         bgAudio.play().catch(e => console.log("Error de audio:", e));
@@ -102,7 +102,7 @@ async function initAudio() {
 }
 
 /* ==========================================================
-   OSCILOSCOPIO VISUAL (LAS 3 ONDAS)
+   OSCILOSCOPIO VISUAL (UNA SOLA ONDA QUE SE APLANA)
 ========================================================== */
 const canvas = document.getElementById('oscilloscope');
 const ctx = canvas.getContext('2d');
@@ -118,7 +118,7 @@ resizeCanvas();
 
 function initVisualizer() {
     function draw() {
-        // SI GANA: DIBUJAMOS LA LÍNEA RECTA PERFECTA EN EL CENTRO
+        // SI GANA: LÍNEA TOTALMENTE PLANA
         if (isWon) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.lineWidth = 4;
@@ -127,51 +127,52 @@ function initVisualizer() {
             ctx.shadowColor = '#00FF9D';
             ctx.beginPath();
             ctx.moveTo(0, canvas.height / 2);
-            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2); // "-----------------"
             ctx.stroke();
-            return; // Se detiene la animación y queda 100% congelada
+            return; // Detenemos la animación
         }
 
         animationId = requestAnimationFrame(draw);
-        time += 0.05;
+        time += 0.1;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.shadowBlur = 0; // Sin brillo hasta que sea perfecta
+        ctx.shadowBlur = 0;
 
-        // Calculamos cuánto de "mal" está cada palanca individualmente (de 0 a 1)
-        const errB = Math.min(1.0, Math.abs(values.bass - CONFIG.targetBass) / 80);
-        const errM = Math.min(1.0, Math.abs(values.mid - CONFIG.targetMid) / 80);
-        const errT = Math.min(1.0, Math.abs(values.treble - CONFIG.targetTreble) / 80);
+        // Calculamos el error global sumando las 3 palancas
+        const errB = Math.abs(values.bass - CONFIG.targetBass);
+        const errM = Math.abs(values.mid - CONFIG.targetMid);
+        const errT = Math.abs(values.treble - CONFIG.targetTreble);
+        
+        // normalizamos el error de 0.0 (perfecto) a 1.0 (lejos)
+        let errorRatio = Math.max(0, Math.min(1.0, (errB + errM + errT) / 220));
 
-        const points = 80;
+        // Dibujamos LA ÚNICA línea
+        ctx.strokeStyle = `rgba(0, 255, 157, ${1 - (errorRatio * 0.5)})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+
+        const points = 120; // Detalle de la línea
         const sliceWidth = canvas.width / points;
+        let x = 0;
 
-        function drawWave(error, freq, speed, offset, color) {
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            let x = 0;
+        for(let i = 0; i <= points; i++) {
+            // Mezcla de onda curva (para que sea bonita) y ruido de picos
+            const baseWave = Math.sin((i * 0.1) + time);
+            const staticNoise = (Math.random() * 2 - 1);
             
-            for(let i = 0; i <= points; i++) {
-                const staticNoise = (Math.random() * 0.6 - 0.3) * error;
-                const wave = Math.sin((i * freq) + (time * speed) + offset);
-                
-                // Mientras menor sea el error, más plano es el yOffset
-                const yOffset = (wave + staticNoise) * error * (canvas.height / 2.5);
-                const y = (canvas.height / 2) + yOffset;
-                
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-                
-                x += sliceWidth;
-            }
-            ctx.stroke();
-        }
+            // LA MAGIA ESTÁ AQUÍ: La altura de los picos se multiplica por el error.
+            // Si el error es 0, toda la ecuación da 0, lo que hace una línea recta.
+            const waveAmplitude = (baseWave * 0.3) + (staticNoise * 0.7);
+            const yOffset = waveAmplitude * errorRatio * (canvas.height / 1.8);
+            
+            const y = (canvas.height / 2) + yOffset;
 
-        // 3 Ondas para las 3 palancas
-        drawWave(errB, 0.05, 1.2, 0, 'rgba(0, 255, 157, 0.8)');
-        drawWave(errM, 0.15, 2.0, 10, 'rgba(0, 255, 157, 0.5)');
-        drawWave(errT, 0.40, 3.5, 20, 'rgba(0, 255, 157, 0.3)');
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            
+            x += sliceWidth;
+        }
+        ctx.stroke();
     }
     draw();
 }
@@ -239,17 +240,17 @@ function checkProximity() {
     
     const totalError = errB + errM + errT;
     
-    // VICTORIA: Las ondas ya son casi perfectamente planas
+    // VICTORIA: La onda ya es una línea plana "------"
     if (totalError < 15 && !isWon) {
         triggerWinSequence();
         return;
     } 
 
     if (!isWon) {
-        // errorRatio: 1 = Muy lejos (Caos total) -> 0 = Muy cerca (Casi plano)
-        let errorRatio = Math.max(0, Math.min(1.0, totalError / 260));
+        // errorRatio: 1 = Muy lejos -> 0 = Casi plano
+        let errorRatio = Math.max(0, Math.min(1.0, totalError / 220));
         
-        // Brillo visual
+        // El brillo verde de la interfaz sube al acercarse
         document.documentElement.style.setProperty('--ui-glow', 1 - errorRatio);
 
         // Haptic sutil al acercarse
@@ -263,19 +264,22 @@ function updateAudioEngine(errorRatio) {
     if (!audioCtx || !isAudioInitialized) return;
     const time = audioCtx.currentTime;
     
-    // Nivel de acierto: 0 (lejos) a 1 (perfecto)
+    // Nivel de puntería: 0 (lejos) a 1 (perfecto)
     const accuracy = 1 - errorRatio;
 
-    // 1. EL RUIDO: Va desapareciendo progresivamente conforme se aplanan las ondas
-    if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(1.5 * errorRatio, time, 0.1);
+    // 1. EL RUIDO: Va bajando, pero siempre tapa a la canción hasta el final
+    if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0.3 + (1.5 * errorRatio), time, 0.1);
 
-    // 2. LA CLARIDAD (FILTRO): Se abre poco a poco, dejando escuchar la voz y agudos
-    // Empieza en 100Hz y sube con una curva matemática hasta 8000Hz (muy nítido)
-    const newFreq = 100 + (8000 * Math.pow(accuracy, 2));
+    // 2. EL SECRETO MUSICAL (FILTRO EXPONENCIAL):
+    // Al usar Math.pow(accuracy, 4), el filtro se queda en números bajísimos (100-300Hz) 
+    // la inmensa mayor parte del tiempo. Es imposible saber qué canción es.
+    // Solo cuando la puntería (accuracy) supera el 80-90% se abre de golpe dejando oír la melodía.
+    const newFreq = 50 + (8000 * Math.pow(accuracy, 4));
     if(filterNode) filterNode.frequency.setTargetAtTime(newFreq, time, 0.1);
 
-    // 3. EL VOLUMEN: Sube progresivamente del 5% al 100%
-    let songVol = 0.05 + (0.95 * accuracy);
+    // 3. EL VOLUMEN DE LA CANCIÓN:
+    // Pasa igual, se mantiene bajísimo y solo sube significativamente al final del todo.
+    let songVol = 0.01 + (0.99 * Math.pow(accuracy, 3));
     if(songGain) songGain.gain.setTargetAtTime(songVol, time, 0.1);
 }
 
@@ -288,12 +292,12 @@ function triggerWinSequence() {
     if (audioCtx) {
         const time = audioCtx.currentTime;
         
-        // 1. Apagamos el poco ruido que quede de golpe
+        // 1. Silenciamos la estática al instante
         if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0, time, 0.05);
 
-        // 2. MÚSICA 100% NÍTIDA Y AL MÁXIMO (Quita el filtro del todo)
+        // 2. MÚSICA 100% NÍTIDA Y AL MÁXIMO
         if(songGain) songGain.gain.setTargetAtTime(1.0, time, 0.05);
-        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.05);
+        if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.05); // Abre toda la canción
     }
 
     // Vibración de victoria
@@ -301,6 +305,7 @@ function triggerWinSequence() {
 
     document.getElementById('screen-tuning').classList.add('flash-effect');
 
+    // Esperamos 1.5 segundos para que vea la onda perfectamente plana y brillar antes de cambiar de pantalla
     setTimeout(() => {
         switchScreen('tuning', 'reveal');
         runCinematicReveal();
