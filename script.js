@@ -102,7 +102,7 @@ async function initAudio() {
         // 3. LA ONDA SINTÉTICA (Truco: Solo va a la pantalla para que se "alinee" visualmente)
         synthOsc = audioCtx.createOscillator();
         synthOsc.type = 'sine';
-        synthOsc.frequency.value = 150; 
+        synthOsc.frequency.value = 86; // <-- CAMBIA EL 150 POR 86
         synthOsc.connect(analyser);
         synthOsc.start();
 
@@ -137,6 +137,7 @@ function initVisualizer() {
     const dataArray = new Uint8Array(bufferLength);
 
     function draw() {
+       if (isWon) return; // ¡AÑADE ESTA LÍNEA AQUÍ! Congela la onda al ganar.
         animationId = requestAnimationFrame(draw);
         analyser.getByteTimeDomainData(dataArray);
 
@@ -231,7 +232,9 @@ function checkProximity() {
     } 
 
     if (!isWon) {
-        let errorRatio = Math.min(totalError / 150, 1.0); // 0.0 (cerca) a 1.0 (lejos)
+        //let errorRatio = Math.min(totalError / 150, 1.0); // 0.0 (cerca) a 1.0 (lejos)
+       let errorRatio = totalError / 260; 
+       errorRatio = Math.max(0, Math.min(1.0, errorRatio)); 
         
         // Brillo de la interfaz
         document.documentElement.style.setProperty('--ui-glow', 1 - errorRatio);
