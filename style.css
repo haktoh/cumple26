@@ -14,7 +14,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    /* Prevenir selecciones para evitar sombras azules raras al tocar */
+    /* Prevenir selecciones y comportamientos táctiles por defecto en toda la app */
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -32,14 +32,11 @@ body {
     justify-content: center;
     align-items: center;
     
-    /* CRÍTICO PARA EL PIXEL 9A: Evita el pull-to-refresh de Android y el scroll rebotando */
-    overscroll-behavior-y: none; 
-    touch-action: none; 
+    /* VITAL PARA EL PIXEL 9A: Evita tirones de pantalla o pull-to-refresh */
+    overscroll-behavior-y: none;
+    touch-action: none;
 }
 
-/* ==========================================================
-   PANTALLAS
-========================================================== */
 .screen {
     position: absolute;
     top: 0;
@@ -48,232 +45,257 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.6s ease-in-out;
+    transition: opacity 1.2s ease-in-out;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 .screen.active {
     opacity: 1;
-    pointer-events: auto;
+    pointer-events: all;
 }
 
-/* ==========================================================
-   BOTONES
-========================================================== */
-.btn-primary {
-    background: transparent;
-    border: 1px solid var(--accent-color);
-    color: var(--accent-color);
-    font-family: var(--font-title);
-    font-size: 1.1rem;
-    padding: 1rem 2.5rem;
-    border-radius: 4px;
-    letter-spacing: 2px;
-    cursor: pointer;
-    text-transform: uppercase;
-    transition: all 0.3s ease;
-    box-shadow: 0 0 15px var(--accent-glow);
-}
-
-.btn-primary:active {
-    background: var(--accent-color);
-    color: var(--bg-color);
-    transform: scale(0.95);
-}
-
-/* ==========================================================
-   PANTALLA DE INTRO
-========================================================== */
+/* =========================================
+   INTRO
+   ========================================= */
 .intro-content {
-    text-align: center;
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 2rem;
+    gap: 1.5rem;
+}
+
+.intro-content p {
+    font-size: 1.1rem;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    color: #A0A5AA;
 }
 
 .fade-in-text {
-    font-size: 1.2rem;
-    font-weight: 300;
-    letter-spacing: 1px;
-    animation: fadeIn 2s forwards;
     opacity: 0;
+    animation: fadeIn 1.5s forwards ease-in-out;
 }
-
-.delay-1 { animation-delay: 1.5s; }
-.delay-2 { animation-delay: 3s; }
+.delay-1 { animation-delay: 1s; }
+.delay-2 { animation-delay: 2.5s; }
 
 @keyframes fadeIn {
     to { opacity: 1; }
 }
 
-/* ==========================================================
-   MESA DE MEZCLAS (TUNING)
-========================================================== */
-.tuning-header {
-    position: absolute;
-    top: env(safe-area-inset-top, 20px);
+.btn-primary {
+    background: transparent;
+    color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+    padding: 1rem 3rem;
+    font-family: var(--font-title);
+    font-size: 1rem;
+    letter-spacing: 2px;
+    border-radius: 4px;
+    cursor: pointer;
     margin-top: 2rem;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:active {
+    background: var(--accent-color);
+    color: var(--bg-color);
+}
+
+/* =========================================
+   TUNING (MESA DE MEZCLAS)
+   ========================================= */
+#screen-tuning {
+    justify-content: space-between;
+    background: radial-gradient(circle at 50% 50%, #0a0d10 0%, #030405 100%);
+}
+
+.tuning-header {
+    text-align: center;
+    padding: 2rem 0 1rem;
 }
 
 .tuning-header h1 {
     font-family: var(--font-title);
-    font-size: 1rem;
+    font-size: 0.85rem;
     letter-spacing: 4px;
-    color: var(--accent-color);
-    text-shadow: 0 0 10px var(--accent-glow);
+    color: #60656A;
 }
 
 .oscilloscope-container {
-    width: 90%;
-    max-width: 400px;
-    height: 150px;
-    background: var(--panel-bg);
-    border: 1px solid #1a1e24;
-    border-radius: 8px;
-    margin-bottom: 3rem;
-    position: relative;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-}
-
-#oscilloscope {
+    flex: 1;
     width: 100%;
-    height: 100%;
-    border-radius: 8px;
-}
-
-.mixer-panel {
-    display: flex;
-    gap: 2rem;
-    padding: 2rem;
-    background: var(--panel-bg);
-    border: 1px solid #1a1e24;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-}
-
-.channel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.5rem;
-}
-
-.channel-label {
-    font-size: 0.75rem;
-    letter-spacing: 2px;
-    color: #666;
-    font-weight: 600;
-}
-
-/* Los Sliders táctiles */
-.slider {
-    width: 40px;
-    height: 200px;
+    max-height: 35%;
     position: relative;
     display: flex;
     justify-content: center;
-    cursor: pointer;
-    touch-action: none;
+    align-items: center;
+    padding: 0 1rem;
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 10px rgba(0, 255, 157, var(--ui-glow, 0)));
+    transition: filter 0.3s;
+}
+
+/* Mezclador */
+.mixer-container {
+    flex: 1.2;
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+    padding: 2rem 1rem 3rem;
+    background: linear-gradient(to top, var(--panel-bg), transparent);
+}
+
+.mixer-channel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    width: 30%;
+    gap: 1.5rem;
 }
 
 .slider-track {
-    width: 6px;
-    height: 100%;
+    flex: 1;
+    width: 4px;
     background: var(--slider-track);
-    border-radius: 3px;
+    border-radius: 2px;
     position: relative;
-    box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+    touch-action: none; /* Vital para que no haga scroll al arrastrar */
+    display: flex;
+    justify-content: center;
+}
+
+.slider-track::before {
+    content: '';
+    position: absolute;
+    inset: -20px; /* Área táctil ampliada invisible */
+}
+
+.slider-fill {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: var(--accent-color);
+    height: 50%; /* Controlado por JS */
+    border-radius: 2px;
+    opacity: calc(var(--ui-glow, 0) * 0.8);
+    box-shadow: 0 0 15px var(--accent-glow);
+    transition: opacity 0.3s;
 }
 
 .slider-thumb {
     position: absolute;
-    width: 36px;
-    height: 16px;
+    width: 50px;
+    height: 24px;
     background: var(--slider-thumb);
-    border: 1px solid #3a4149;
+    border: 2px solid #3A4048;
     border-radius: 4px;
-    bottom: 50%; /* Estado Inicial visual */
+    bottom: 50%; /* Controlado por JS */
     transform: translateY(50%);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.1);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     display: flex;
     justify-content: center;
     align-items: center;
+    pointer-events: none;
 }
 
+/* Línea indicadora del fader */
 .slider-thumb::after {
     content: '';
-    width: 80%;
+    width: 70%;
     height: 2px;
-    background: #fff;
-    opacity: 0.3;
+    background: #60656A;
+    border-radius: 1px;
 }
 
-/* Efecto de Victoria */
-.flash-effect {
-    animation: flash 1s forwards;
+.channel-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: #60656A;
 }
 
-@keyframes flash {
-    0% { background-color: var(--bg-color); }
-    10% { background-color: #fff; }
-    100% { background-color: var(--bg-color); }
-}
-
-/* ==========================================================
-   SECUENCIA CINEMATOGRÁFICA (REVEAL)
-========================================================== */
-.reveal-step {
+/* =========================================
+   REVELACIÓN (CINEMATOGRÁFICA)
+   ========================================= */
+#screen-reveal {
+    justify-content: center;
+    align-items: center;
     text-align: center;
-    transition: opacity 0.5s ease;
+    padding: 2rem;
+}
+
+.reveal-step {
+    position: absolute;
+    width: 100%;
+    padding: 0 2rem;
+    opacity: 1;
+    transition: opacity 1.5s ease-in-out, transform 1.5s ease-in-out;
+    transform: translateY(0);
+}
+
+.reveal-step.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
 }
 
 .reveal-step h2 {
     font-family: var(--font-title);
     color: var(--accent-color);
-    letter-spacing: 5px;
-    text-shadow: 0 0 20px var(--accent-glow);
     font-size: 1.5rem;
+    letter-spacing: 3px;
+    text-shadow: 0 0 20px var(--accent-glow);
 }
 
 .reveal-step p {
     font-size: 1.2rem;
     font-weight: 300;
+    color: #E0E0E0;
+    line-height: 1.5;
 }
 
 .artist-name {
     font-size: 3rem !important;
+    color: #FFF !important;
     margin-bottom: 0.5rem;
+    text-shadow: none !important;
 }
 
 .ticket-count {
-    font-size: 1rem !important;
-    color: #888;
-    letter-spacing: 3px;
+    font-family: var(--font-title);
+    color: var(--accent-color) !important;
+    letter-spacing: 4px;
+    font-size: 0.9rem !important;
     margin-bottom: 3rem;
 }
 
-.hidden {
-    opacity: 0;
-    pointer-events: none;
-    position: absolute;
+/* =========================================
+   ENTRADAS
+   ========================================= */
+#screen-tickets {
+    background: #050505;
 }
 
-/* ==========================================================
-   PANTALLA FINAL: LAS ENTRADAS
-========================================================== */
 .tickets-container {
-    width: 100%;
-    height: 100%;
+    flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     padding: 2rem 1.5rem;
     gap: 1.5rem;
-    overflow-y: auto; /* Permitir scroll solo en esta pantalla si fuera necesario */
+    overflow-y: auto;
 }
 
 .ticket-card {
@@ -283,26 +305,26 @@ body {
     border-radius: 12px;
     overflow: hidden;
     display: flex;
-    border: 1px solid #333;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.8), 0 0 15px rgba(212, 175, 55, 0.05); /* Efecto dorado muy sutil */
+    border: 1px solid #222;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
 }
 
 .ticket-image {
-    width: 110px;
+    width: 100px;
     background-size: cover;
     background-position: center;
     border-right: 2px dashed #222;
     position: relative;
 }
 
-/* Efecto de muescas redondas tipo ticket clásico */
+/* Muescas de la entrada */
 .ticket-image::before, .ticket-image::after {
     content: '';
     position: absolute;
     right: -10px;
     width: 20px;
     height: 20px;
-    background: var(--bg-color); 
+    background: #050505;
     border-radius: 50%;
 }
 .ticket-image::before { top: -10px; }
@@ -314,27 +336,51 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    background: linear-gradient(135deg, #111 0%, #1a1a1a 100%);
 }
 
 .t-name {
     font-family: var(--font-title);
-    color: #fff;
     font-size: 1.1rem;
     margin-bottom: 0.5rem;
+    color: #FFF;
 }
 
 .t-date, .t-loc {
+    font-size: 0.8rem;
     color: #888;
-    font-size: 0.85rem;
     margin-bottom: 0.2rem;
 }
 
 .final-message {
     margin-top: 1rem;
+    font-family: var(--font-title);
     color: var(--accent-color);
-    font-size: 0.95rem;
+    font-size: 1.1rem;
     text-align: center;
-    max-width: 85%;
-    line-height: 1.5;
+}
+
+/* =========================================
+   EFECTO DE FLASH BLANCO AL GANAR
+   ========================================= */
+.flash-effect::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: white;
+    animation: flashAnim 1s forwards;
+    pointer-events: none;
+    z-index: 1000;
+}
+@keyframes flashAnim {
+    0% { opacity: 0; }
+    10% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Reducción de movimiento */
+@media (prefers-reduced-motion: reduce) {
+    .screen, .reveal-step, .fade-in-text {
+        transition-duration: 0.1s !important;
+        animation-duration: 0.1s !important;
+    }
 }
