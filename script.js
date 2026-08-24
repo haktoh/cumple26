@@ -318,7 +318,7 @@ function runCinematicReveal() {
 }
 
 /* ==========================================================
-   PANTALLA DE ENTRADAS (REVELACIÓN EN CASCADA INVERTIDA)
+   PANTALLA DE ENTRADAS (CASCADA CON ORDEN EXACTO)
 ========================================================== */
 document.getElementById('btn-show-tickets').addEventListener('click', () => {
     const tImg1 = document.getElementById('t-img-1');
@@ -340,34 +340,32 @@ document.getElementById('btn-show-tickets').addEventListener('click', () => {
         tImg2.style.transition = 'opacity 2s ease-in-out';
     }
     
-    // 2. Vaciamos los textos
+    // 2. Vaciamos los textos y preparamos la misma línea dividida en dos "spans"
     const names = document.querySelectorAll('.t-name');
     const dates = document.querySelectorAll('.t-date');
     const locs = document.querySelectorAll('.t-loc');
     const finalMsg = document.getElementById('final-msg') || document.querySelector('.final-message');
     
-    names.forEach(el => el.innerHTML = '');
+    // Preparamos el terreno para escribir de derecha a izquierda en la misma línea
+    names.forEach(el => el.innerHTML = '<span class="artist-text"></span><span class="tour-text"></span>');
     dates.forEach(el => el.textContent = '');
     locs.forEach(el => el.textContent = '');
     if(finalMsg) finalMsg.textContent = '';
 
-    // 3. Separamos "MACACO" de "FUTURO ANCESTRAL TOUR" automáticamente
+    // 3. Separamos los textos
     const splitName = CONFIG.concertName.split(' - ');
-    const artistText = splitName[0]; // MACACO
-    const tourText = splitName[1];   // FUTURO ANCESTRAL TOUR
+    const artistText = splitName[0] + ' - '; // "MACACO - "
+    const tourText = splitName[1];           // "FUTURO ANCESTRAL TOUR"
 
     // 4. Transición de pantalla
     switchScreen('reveal', 'tickets');
 
-    // Función de máquina de escribir adaptada
-    function typeWriter(elements, text, speed, callback, isHTML = false) {
+    // Función de máquina de escribir
+    function typeWriter(elements, text, speed, callback) {
         let i = 0;
         function type() {
             if (i < text.length) {
-                elements.forEach(el => {
-                    if (isHTML) el.innerHTML += text.charAt(i);
-                    else el.textContent += text.charAt(i);
-                });
+                elements.forEach(el => el.textContent += text.charAt(i));
                 i++;
                 setTimeout(type, speed);
             } else if (callback) {
@@ -377,30 +375,27 @@ document.getElementById('btn-show-tickets').addEventListener('click', () => {
         type();
     }
 
-    // 5. LA COREOGRAFÍA DE LOS TEXTOS
+    // 5. EL ORDEN EXACTO QUE HAS PEDIDO
     setTimeout(() => {
-        // Primero la Fecha
+        // PASO 1: La fecha
         typeWriter(dates, CONFIG.concertDate, 50, () => {
-            // Luego el Lugar
+            // PASO 2: El lugar
             typeWriter(locs, CONFIG.concertLocation, 50, () => {
-                // Luego el Nombre del Tour
-                typeWriter(names, tourText, 60, () => {
-                    // Preparamos la línea para el Artista (con un color verde destacado)
-                    names.forEach(el => el.innerHTML += '<br><span style="color: var(--accent-color); font-size: 1.3rem;">');
-                    // Escribimos MACACO
-                    typeWriter(names, artistText, 80, () => {
-                        names.forEach(el => el.innerHTML += '</span>');
-                        
-                        // ¡BUM! Aparecen las fotos
+                // PASO 3: Título del concierto (Derecha)
+                const tourSpans = document.querySelectorAll('.tour-text');
+                typeWriter(tourSpans, tourText, 60, () => {
+                    // PASO 4: Artista (Se inyecta a la izquierda empujando el texto)
+                    const artistSpans = document.querySelectorAll('.artist-text');
+                    typeWriter(artistSpans, artistText, 80, () => {
+                        // PASO 5: La foto de las entradas
                         if(tImg1) tImg1.style.opacity = '1';
                         if(tImg2) tImg2.style.opacity = '1';
                         
-                        // Y con las fotos ya en pantalla, tecleamos tu dedicatoria final
+                        // PASO 6: El texto de abajo
                         setTimeout(() => {
                             if(finalMsg) typeWriter([finalMsg], CONFIG.finalMessage, 60);
-                        }, 1000); // Pequeña pausa para que asimile las fotos
-                        
-                    }, true);
+                        }, 1500); // Pausa de 1.5s para que vea las fotos antes del mensaje
+                    });
                 });
             });
         });
@@ -413,4 +408,5 @@ function switchScreen(hideId, showId) {
         if(screens[showId]) screens[showId].classList.add('active');
     }, 600);
 }
+
 
