@@ -248,7 +248,7 @@ function checkProximity() {
         
         document.documentElement.style.setProperty('--ui-glow', 1 - errorRatio);
 
-        if (navigator.vibrate && totalError < 30 && totalError % 5 < 1) navigator.vibrate(15);
+        if (navigator.vibrate && totalError < 30 && totalError % 5 < 1) navigator.vibrate(45);
         
         updateAudioEngine(errorRatio);
     }
@@ -287,7 +287,7 @@ function triggerWinSequence() {
         if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.05); 
     }
 
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300, 100, 1000]);
 
     document.getElementById('screen-tuning').classList.add('flash-effect');
 
