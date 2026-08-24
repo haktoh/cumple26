@@ -258,20 +258,20 @@ function updateAudioEngine(errorRatio) {
     if (!audioCtx || !isAudioInitialized) return;
     const time = audioCtx.currentTime;
     
-    const accuracy = 1 - errorRatio;
-
-    // El ruido de radio baja pero siempre tapa la canción
+    // 1. La estática sube o baja, pero nunca desaparece del todo hasta ganar
     if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0.3 + (1.5 * errorRatio), time, 0.1);
 
-    // Filtro exponencial para no revelar la canción hasta el final
-    const newFreq = 50 + (350 * Math.pow(accuracy, 4));
-    if(filterNode) filterNode.frequency.setTargetAtTime(newFreq, time, 0.1);
+    // 2. Mantenemos el filtro súper cerrado por precaución
+    if(filterNode) filterNode.frequency.setTargetAtTime(50, time, 0.1);
 
-    // El volumen de la canción
-    let songVol = 0.01 + (0.99 * Math.pow(accuracy, 3));
-    if(songGain) songGain.gain.setTargetAtTime(songVol, time, 0.1);
+    // 3. LA CLAVE: El volumen de la canción se queda a 0. ¡Cero spoilers!
+    if(songGain) songGain.gain.setTargetAtTime(0, time, 0.1);
 }
 
+
+/* ==========================================================
+   SECUENCIA FINAL Y REVELACIÓN
+========================================================== */
 /* ==========================================================
    SECUENCIA FINAL Y REVELACIÓN
 ========================================================== */
@@ -281,13 +281,16 @@ function triggerWinSequence() {
     if (audioCtx) {
         const time = audioCtx.currentTime;
         
+        // Silenciamos la estática de golpe
         if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0, time, 0.05);
 
+        // AQUÍ ENTRA LA CANCIÓN CON TODA SU CALIDAD
         if(songGain) songGain.gain.setTargetAtTime(1.0, time, 0.05);
         if(filterNode) filterNode.frequency.setTargetAtTime(20000, time, 0.05); 
     }
 
-    if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300, 100, 1000]);
+    // Vibración elegante: un toque corto y uno más largo
+    if (navigator.vibrate) navigator.vibrate([150, 100, 300]);
 
     document.getElementById('screen-tuning').classList.add('flash-effect');
 
@@ -296,6 +299,7 @@ function triggerWinSequence() {
         runCinematicReveal();
     }, 1500); 
 }
+
 
 function runCinematicReveal() {
     const step1 = document.getElementById('reveal-step-1');
@@ -314,22 +318,26 @@ function runCinematicReveal() {
 }
 
 /* ==========================================================
-   PANTALLA DE ENTRADAS
+   PANTALLA DE ENTRADAS (MÁQUINA DE ESCRIBIR + IMAGEN SIN PARPADEO)
 ========================================================== */
 document.getElementById('btn-show-tickets').addEventListener('click', () => {
     const tImg1 = document.getElementById('t-img-1');
     const tImg2 = document.getElementById('t-img-2');
     
-    // 1. Ocultamos las fotos e inyectamos la transición antes de mostrar la pantalla
+    // 1. Truco anti-parpadeo: cortamos la transición, ponemos a 0 y forzamos el renderizado
     if(tImg1) {
+        tImg1.style.transition = 'none';
         tImg1.style.opacity = '0';
-        tImg1.style.transition = 'opacity 2s ease-in-out'; // Fundido muy suave de 2 segundos
         tImg1.style.backgroundImage = `url('${CONFIG.ticketImage1}')`;
+        void tImg1.offsetWidth; // Fuerza al navegador a aplicar los estilos de arriba YA
+        tImg1.style.transition = 'opacity 2s ease-in-out'; // Devolvemos el fundido
     }
     if(tImg2) {
+        tImg2.style.transition = 'none';
         tImg2.style.opacity = '0';
-        tImg2.style.transition = 'opacity 2s ease-in-out';
         tImg2.style.backgroundImage = `url('${CONFIG.ticketImage2}')`;
+        void tImg2.offsetWidth; 
+        tImg2.style.transition = 'opacity 2s ease-in-out';
     }
     
     // 2. Vaciamos los textos
@@ -343,10 +351,10 @@ document.getElementById('btn-show-tickets').addEventListener('click', () => {
     locs.forEach(el => el.textContent = '');
     if(finalMsg) finalMsg.textContent = '';
 
-    // 3. Transición a la pantalla de las entradas
+    // 3. Transición de pantalla
     switchScreen('reveal', 'tickets');
 
-    // 4. Función de máquina de escribir (reutilizable)
+    // 4. Función de máquina de escribir
     function typeWriter(elements, text, speed, callback) {
         let i = 0;
         function type() {
@@ -355,27 +363,26 @@ document.getElementById('btn-show-tickets').addEventListener('click', () => {
                 i++;
                 setTimeout(type, speed);
             } else if (callback) {
-                setTimeout(callback, 400); // Pausa tensa entre líneas de texto
+                setTimeout(callback, 400); 
             }
         }
         type();
     }
 
-    // 5. Ejecutamos la cascada lenta de texto
+    // 5. Cascada de texto
     setTimeout(() => {
-        // Velocidades más lentas: 75ms por letra para dar tensión
         typeWriter(names, CONFIG.concertName, 75, () => {
             typeWriter(dates, CONFIG.concertDate, 60, () => {
                 typeWriter(locs, CONFIG.concertLocation, 60, () => {
                     if(finalMsg) typeWriter([finalMsg], CONFIG.finalMessage, 80, () => {
-                        // 6. EL MOMENTO CLAVE: Se acabó el texto, aparecen las fotos
+                        // 6. ¡BUM! Aparecen las fotos suavemente al acabar todo el texto
                         if(tImg1) tImg1.style.opacity = '1';
                         if(tImg2) tImg2.style.opacity = '1';
                     });
                 });
             });
         });
-    }, 800); // Pequeño delay extra al abrir la pantalla para crear suspense
+    }, 800); 
 });
 
 function switchScreen(hideId, showId) {
