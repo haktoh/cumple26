@@ -317,19 +317,50 @@ function runCinematicReveal() {
    PANTALLA DE ENTRADAS
 ========================================================== */
 document.getElementById('btn-show-tickets').addEventListener('click', () => {
-    document.querySelectorAll('.t-name').forEach(el => el.textContent = CONFIG.concertName);
-    document.querySelectorAll('.t-date').forEach(el => el.textContent = CONFIG.concertDate);
-    document.querySelectorAll('.t-loc').forEach(el => el.textContent = CONFIG.concertLocation);
-    
     const tImg1 = document.getElementById('t-img-1');
     const tImg2 = document.getElementById('t-img-2');
     if(tImg1) tImg1.style.backgroundImage = `url('${CONFIG.ticketImage1}')`;
     if(tImg2) tImg2.style.backgroundImage = `url('${CONFIG.ticketImage2}')`;
     
+    // 1. Capturamos los elementos y los vaciamos ANTES de mostrar la pantalla
+    const names = document.querySelectorAll('.t-name');
+    const dates = document.querySelectorAll('.t-date');
+    const locs = document.querySelectorAll('.t-loc');
     const finalMsg = document.getElementById('final-msg') || document.querySelector('.final-message');
-    if(finalMsg) finalMsg.textContent = CONFIG.finalMessage;
+    
+    names.forEach(el => el.textContent = '');
+    dates.forEach(el => el.textContent = '');
+    locs.forEach(el => el.textContent = '');
+    if(finalMsg) finalMsg.textContent = '';
 
+    // 2. Hacemos la transición de pantalla
     switchScreen('reveal', 'tickets');
+
+    // 3. Función auxiliar para el efecto de máquina de escribir
+    function typeWriter(elements, text, speed, callback) {
+        let i = 0;
+        function type() {
+            if (i < text.length) {
+                elements.forEach(el => el.textContent += text.charAt(i));
+                i++;
+                setTimeout(type, speed);
+            } else if (callback) {
+                setTimeout(callback, 200); // Pequeña pausa antes de escribir la siguiente línea
+            }
+        }
+        type();
+    }
+
+    // 4. Arrancamos la cascada de texto justo después del fundido de pantalla (600ms)
+    setTimeout(() => {
+        typeWriter(names, CONFIG.concertName, 35, () => {
+            typeWriter(dates, CONFIG.concertDate, 40, () => {
+                typeWriter(locs, CONFIG.concertLocation, 40, () => {
+                    if(finalMsg) typeWriter([finalMsg], CONFIG.finalMessage, 50);
+                });
+            });
+        });
+    }, 600);
 });
 
 function switchScreen(hideId, showId) {
