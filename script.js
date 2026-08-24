@@ -238,7 +238,7 @@ function checkProximity() {
     const totalError = errB + errM + errT;
     
     // VICTORIA: Tolerancia para ganar (margen de 15 sobre 300)
-    if (totalError < 15 && !isWon) {
+    if (totalError < 4 && !isWon) {
         triggerWinSequence();
         return;
     } 
@@ -264,7 +264,7 @@ function updateAudioEngine(errorRatio) {
     if(noiseGainAudio) noiseGainAudio.gain.setTargetAtTime(0.3 + (1.5 * errorRatio), time, 0.1);
 
     // Filtro exponencial para no revelar la canción hasta el final
-    const newFreq = 50 + (8000 * Math.pow(accuracy, 4));
+    const newFreq = 50 + (350 * Math.pow(accuracy, 4));
     if(filterNode) filterNode.frequency.setTargetAtTime(newFreq, time, 0.1);
 
     // El volumen de la canción
