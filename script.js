@@ -319,10 +319,20 @@ function runCinematicReveal() {
 document.getElementById('btn-show-tickets').addEventListener('click', () => {
     const tImg1 = document.getElementById('t-img-1');
     const tImg2 = document.getElementById('t-img-2');
-    if(tImg1) tImg1.style.backgroundImage = `url('${CONFIG.ticketImage1}')`;
-    if(tImg2) tImg2.style.backgroundImage = `url('${CONFIG.ticketImage2}')`;
     
-    // 1. Capturamos los elementos y los vaciamos ANTES de mostrar la pantalla
+    // 1. Ocultamos las fotos e inyectamos la transición antes de mostrar la pantalla
+    if(tImg1) {
+        tImg1.style.opacity = '0';
+        tImg1.style.transition = 'opacity 2s ease-in-out'; // Fundido muy suave de 2 segundos
+        tImg1.style.backgroundImage = `url('${CONFIG.ticketImage1}')`;
+    }
+    if(tImg2) {
+        tImg2.style.opacity = '0';
+        tImg2.style.transition = 'opacity 2s ease-in-out';
+        tImg2.style.backgroundImage = `url('${CONFIG.ticketImage2}')`;
+    }
+    
+    // 2. Vaciamos los textos
     const names = document.querySelectorAll('.t-name');
     const dates = document.querySelectorAll('.t-date');
     const locs = document.querySelectorAll('.t-loc');
@@ -333,10 +343,10 @@ document.getElementById('btn-show-tickets').addEventListener('click', () => {
     locs.forEach(el => el.textContent = '');
     if(finalMsg) finalMsg.textContent = '';
 
-    // 2. Hacemos la transición de pantalla
+    // 3. Transición a la pantalla de las entradas
     switchScreen('reveal', 'tickets');
 
-    // 3. Función auxiliar para el efecto de máquina de escribir
+    // 4. Función de máquina de escribir (reutilizable)
     function typeWriter(elements, text, speed, callback) {
         let i = 0;
         function type() {
@@ -345,22 +355,27 @@ document.getElementById('btn-show-tickets').addEventListener('click', () => {
                 i++;
                 setTimeout(type, speed);
             } else if (callback) {
-                setTimeout(callback, 200); // Pequeña pausa antes de escribir la siguiente línea
+                setTimeout(callback, 400); // Pausa tensa entre líneas de texto
             }
         }
         type();
     }
 
-    // 4. Arrancamos la cascada de texto justo después del fundido de pantalla (600ms)
+    // 5. Ejecutamos la cascada lenta de texto
     setTimeout(() => {
-        typeWriter(names, CONFIG.concertName, 35, () => {
-            typeWriter(dates, CONFIG.concertDate, 40, () => {
-                typeWriter(locs, CONFIG.concertLocation, 40, () => {
-                    if(finalMsg) typeWriter([finalMsg], CONFIG.finalMessage, 50);
+        // Velocidades más lentas: 75ms por letra para dar tensión
+        typeWriter(names, CONFIG.concertName, 75, () => {
+            typeWriter(dates, CONFIG.concertDate, 60, () => {
+                typeWriter(locs, CONFIG.concertLocation, 60, () => {
+                    if(finalMsg) typeWriter([finalMsg], CONFIG.finalMessage, 80, () => {
+                        // 6. EL MOMENTO CLAVE: Se acabó el texto, aparecen las fotos
+                        if(tImg1) tImg1.style.opacity = '1';
+                        if(tImg2) tImg2.style.opacity = '1';
+                    });
                 });
             });
         });
-    }, 600);
+    }, 800); // Pequeño delay extra al abrir la pantalla para crear suspense
 });
 
 function switchScreen(hideId, showId) {
